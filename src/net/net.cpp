@@ -1,10 +1,22 @@
 #include "net.h"
+#include "net_err.h"
 
 
 namespace net 
 {
     NetErr_t NetInit::Init()
     {
+        if (exchange_msg_.Init() != NET_ERR_OK)
+        {
+            // 日志
+            throw "NetInit::Init(): initialization exchange msg failed";
+        }
+
+        if (pcap_.Open() != NET_ERR_OK)
+        {
+            // 日志
+            throw "NetInit::Init(): initialization Pcap dev failed";
+        }
         return NET_ERR_OK;
     }
 
@@ -28,12 +40,6 @@ namespace net
         {
             // 日志
             throw "NetInit::Initialization(): start failed";
-        }
-
-        if (exchange_msg_.Init() != NET_ERR_OK)
-        {
-            // 日志
-            throw "NetInit::Initialization(): initialization exchange msg failed";
         }
     }
 }

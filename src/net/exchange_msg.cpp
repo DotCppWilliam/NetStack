@@ -6,9 +6,9 @@ namespace net
 {
     NetErr_t ExchangeMsg::Init()
     {
-        lpcap::SysThread thread(&ExchangeMsg::ThreadFunc, nullptr);
-        if (!thread.Create())
-            return NET_ERR_SYS;
+        // lpcap::SysThread thread(&ExchangeMsg::ThreadFunc, nullptr);
+        // if (!thread.Create())
+        //     return NET_ERR_SYS;
 
         return NET_ERR_OK;
     }

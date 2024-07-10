@@ -1,6 +1,7 @@
 #pragma once
 
 #include "net_err.h"
+#include "net_pcap.h"
 #include "singlton.h"
 #include "exchange_msg.h"
 
@@ -9,7 +10,10 @@ namespace net
     class NetInit 
     {
     public:
-        NetInit() {}
+        NetInit() 
+        {
+            
+        }
         ~NetInit()
         {
 
@@ -23,6 +27,7 @@ namespace net
         NetErr_t Start();
         bool initialized_ = false;
         ExchangeMsg exchange_msg_;
+        lpcap::NetifPcap pcap_;
     };
 
 }

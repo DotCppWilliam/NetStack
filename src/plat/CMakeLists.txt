@@ -1,5 +1,5 @@
 set(PLAT_DIRS ${CMAKE_CURRENT_LIST_DIR}/inc)
-SET(PCAP_DIRS ${PROJECT_SOURCE_DIR}/pcap/inc)
+SET(PCAP_DIRS ${PROJECT_SOURCE_DIR}/src/pcap/inc)
 aux_source_directory(. PLAT_SOURCES)
 
 add_library(Plat STATIC ${PLAT_SOURCES})
