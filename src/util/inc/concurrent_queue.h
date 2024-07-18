@@ -109,7 +109,8 @@ namespace util
             slot.Construct(std::forward<Args>(args)...);
             slot.turn_.store(Turn(head) * 2 + 1, std::memory_order_release);
         }
-        
+
+
         template <typename... Args>
         bool TryEmplace(Args&&... args) noexcept
         {
@@ -203,6 +204,4 @@ namespace util
         Allocator allocator_;
         Slots<T>* slots_;
     };
-
-
 }

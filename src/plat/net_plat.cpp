@@ -5,6 +5,6 @@ namespace lpcap
 {
     bool SysThread::Create()
     {
-
+        return true;
     }
 }
