@@ -36,7 +36,18 @@ namespace net
         NetErr_t RemoveHeader(int size);
         NetErr_t Resize(int size);
         NetErr_t Append(PacketBuffer* dest, PacketBuffer* src);
-        
+        NetErr_t SetStartContinuous(int size);
+        NetErr_t Write(uint8_t* data, int size);
+        NetErr_t Read(uint8_t* dest, int size);
+        NetErr_t Seek(int offset);
+        NetErr_t Copy(PacketBuffer* dest, PacketBuffer* src, int size);
+        NetErr_t Fill(PacketBuffer* buf, uint8_t val, int size);
+    private:
+        void MoveForward(int size);
+        void IncRef();
+        int TotalBlockFree();
+        int CurrBlockFree();
+        uint16_t CheckSum(int size, uint32_t prev_sum, int complement);
     private:
         std::list<PacketBlock*> list_;
         Node* next_pkt_                 = nullptr;    

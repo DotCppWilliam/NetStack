@@ -8,5 +8,7 @@ namespace net
         NET_ERR_SYS     =   -1,
         NET_ERR_NO_MEM  =   -2,     // 没有内存
         NET_ERR_SIZE    =   -3,
+        NET_ERR_NULL    =   -4,
+        NET_ERR_PARAM   =   -5,
     };
 }
