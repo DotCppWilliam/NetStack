@@ -91,7 +91,7 @@ namespace util
         ~ConcurrentQueue() noexcept
         {
             for (size_t i = 0; i < capacity_; i++)
-                slots_[i].~T();
+                slots_[i].~Slots();
             allocator_.Deallocate(slots_, capacity_ + 1);
         }
 
@@ -191,6 +191,10 @@ namespace util
         bool Empty() const noexcept
         { return Size() <= 0; }
 
+        void Clear()    
+        {
+            // TODO: 清除功能还未做
+        }
     private:    
         constexpr size_t Index(size_t i) const noexcept
         { return i % capacity_; }

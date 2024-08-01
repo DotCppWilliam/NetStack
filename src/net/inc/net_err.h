@@ -10,5 +10,7 @@ namespace net
         NET_ERR_SIZE    =   -3,
         NET_ERR_NULL    =   -4,
         NET_ERR_PARAM   =   -5,
+        NET_ERR_NO_OPS  =   -6,
+        NET_ERR_STATE   =   -7,
     };
 }

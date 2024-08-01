@@ -1,18 +1,15 @@
 #pragma once
 
 #include "net_err.h"
+#include "node.h"
+
 #include <list>
 #include <cstdint>
-
 
 namespace net 
 {
     const int kPacketBlockSize = 1024;
-    struct Node 
-    {
-        Node* next_ = nullptr;
-        Node* prev_ = nullptr;
-    };
+    
 
     struct PacketBlock
     {
