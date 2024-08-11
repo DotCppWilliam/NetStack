@@ -90,9 +90,7 @@ namespace util
 
         ~ConcurrentQueue() noexcept
         {
-            for (size_t i = 0; i < capacity_; i++)
-                slots_[i].~Slots();
-            allocator_.Deallocate(slots_, capacity_ + 1);
+            Clear();
         }
 
         ConcurrentQueue(const ConcurrentQueue&) = delete;
@@ -142,8 +140,8 @@ namespace util
 
         template <typename P, 
             typename = typename std::enable_if<std::is_nothrow_constructible<T, P&&>::value>::type>
-        void TryPush(const T& val) noexcept
-        { TryEmplace(val); }
+        bool TryPush(const T& val) noexcept
+        { return TryEmplace(val); }
 
 
 // 弹出操作
@@ -193,7 +191,9 @@ namespace util
 
         void Clear()    
         {
-            // TODO: 清除功能还未做
+            for (size_t i = 0; i < capacity_; i++)
+                slots_[i].~Slots();
+            allocator_.Deallocate(slots_, capacity_ + 1);
         }
     private:    
         constexpr size_t Index(size_t i) const noexcept

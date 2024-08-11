@@ -12,7 +12,7 @@ namespace net
             throw "NetInit::Init(): initialization exchange msg failed";
         }
 
-        if (pcap_.Open() != NET_ERR_OK)
+        if (pcap_.OpenDevice() != NET_ERR_OK)
         {
             // 日志
             throw "NetInit::Init(): initialization Pcap dev failed";

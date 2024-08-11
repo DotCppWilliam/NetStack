@@ -111,7 +111,6 @@ namespace net
                 return;
             list_.push_back(ret);
         }
-        ref_ = 1;
         pos_ = 0;
         curr_block_ = list_.front();
         total_size_ = size;
@@ -120,12 +119,9 @@ namespace net
 
     PacketBuffer::~PacketBuffer()
     {
-        if (--ref_ == 0)
-        {
-            for (auto beg = list_.begin(); beg != list_.end(); ++beg)
-                (*beg)->Deallocate();
-            list_.clear();
-        }
+        for (auto beg = list_.begin(); beg != list_.end(); ++beg)
+            (*beg)->Deallocate();
+        list_.clear();
     }
 
 

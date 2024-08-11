@@ -1,6 +1,7 @@
 #include "net_interface.h"
 #include "PacketBuffer.h"
 #include "net_err.h"
+#include <memory>
 
 namespace net 
 {   
@@ -30,7 +31,7 @@ namespace net
 
     NetErr_t NetInterface::Open(void* arg)
     {
-
+        
 
         return NET_ERR_OK;
     }
@@ -136,18 +137,65 @@ namespace net
 
 
 
-    NetErr_t NetInterface::PushPacket(PacketBuffer& pkt, bool is_recv_queue, bool wait)
+    NetErr_t NetInterface::PushPacket(std::shared_ptr<PacketBuffer> pkt, bool is_recv_queue, bool wait)
     {
+        util::ConcurrentQueue<std::shared_ptr<PacketBuffer>>* queue;
+        if (is_recv_queue)
+            queue = &recv_queue_;
+        else 
+            queue = &send_queue_;
         
+        if (wait)
+        {
+            while (!queue->TryEmplace(pkt));
+        }
+        else 
+        {
+            bool ret = queue->TryEmplace(pkt);
+            if (!ret)
+                return NET_ERR_FULL;
+        }
 
+        // exmsg 通知消息 TODO:
         return NET_ERR_OK;
     }
 
 
-    PacketBuffer& NetInterface::PopPacket(bool is_recv_queue, bool wait)
+    NetErr_t NetInterface::PopPacket(std::shared_ptr<PacketBuffer>, bool is_recv_queue, bool wait)
     {
-        PacketBuffer pkt(100);
+        std::shared_ptr<PacketBuffer> pkt;
+        util::ConcurrentQueue<std::shared_ptr<PacketBuffer>>* queue;
+        if (is_recv_queue)
+            queue = &recv_queue_;
+        else 
+            queue = &send_queue_;
+        
+        if (wait)
+        {
+            while (!queue->TryPop(pkt));
+        }
+        else 
+        {
+            bool ret = queue->TryPop(pkt);
+            if (!ret)
+                return NET_ERR_EMPTY;    
+        }
 
-        return pkt;
+        // exmsg 通知消息 TODO:
+        return NET_ERR_OK;
+    }
+
+
+
+
+
+
+
+
+    NetErr_t NetInterface::Out(IpAddr& addr, std::shared_ptr<PacketBuffer> pkt)
+    {
+        NetErr_t ret = PushPacket(pkt, false);
+        Send(); // 网卡发送数据
+        return ret;
     }
 }

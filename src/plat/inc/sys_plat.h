@@ -1,11 +1,19 @@
 #pragma once
 
+#include "net_err.h"
+#include <condition_variable>
+#include <functional>
+#include <future>
+#include <memory>
+#include <mutex>
 #include <sys/time.h>
 #include <sys/sem.h>
 #include <pthread.h>
 #include <pcap.h>
 #include <thread>
 #include <chrono>
+#include <type_traits>
+#include <vector>
 
 
 using net_time_t = struct timeval;
@@ -27,6 +35,16 @@ using net_time_t = struct timeval;
 #define plat_printf         printf
 #define plat_sleep(ms)      std::this_thread::sleep_for(std::chrono::seconds(ms));
 
+
+
+// 网卡类型
+enum NetIfType {
+    NETIF_TYPE_NONE = 0,
+    NETIF_TYPE_ETHER,       // 普通网卡
+    NETIF_TYPE_LOOP,        // 回环网卡
+};
+
+
 namespace lpcap 
 {
     typedef struct x_sys_sem_t {
@@ -35,8 +53,8 @@ namespace lpcap
         pthread_mutex_t locker_;    // 互斥锁
     } *sys_sem_t;
 
-    using sys_thread_t = pthread_t;
-    using sys_mutex_t = pthread_mutex_t*;
+    using SysThread = pthread_t;
+    using SysMutex = pthread_mutex_t*;
 
 
     // pcap网卡驱动
@@ -44,16 +62,24 @@ namespace lpcap
     {
     public:
         PcapNICDriver(const char* ip) : ip_(ip) {}
-        ~PcapNICDriver() {}
+        PcapNICDriver() {}
+        ~PcapNICDriver();
 
         bool FindDevice(char* name_buf);
         bool ShowList();
-        pcap_t* DeviceOpen(const uint8_t* mac_addr);
+        net::NetErr_t DeviceOpen(const uint8_t* mac_addr);
+        bool OpenAllDefaultDevice();
+        bool IsOpened() const 
+        {
+            return devices_.empty();
+        }
     private:
         const char* ip_;
+        std::vector<pcap_t*> devices_;
     };
 
 
+    // 信号量
     class SysSemaphore
     {
     public:
@@ -74,21 +100,70 @@ namespace lpcap
         sys_sem_t sem_ = nullptr;
     };
 
-    class SysThread 
+
+    // 线程
+    class Thread
     {
     public:
-        using SysThreadFunc_t = void(*)(void*);
+        Thread() {}
+        ~Thread() {}
 
-        SysThread(SysThreadFunc_t entry, void* arg)
-            : func_(entry), arg_(arg) {}
-        
-        bool Create();
-        void Sleep(int ms);
-        sys_thread_t Self();
+        void Start();
+        void Stop();
+
+        template <typename Func, typename... Args>
+        auto SetThreadFunc(Func&& func, Args&&... args) -> 
+            std::future<decltype(func(args...))>
+        {
+            using RType = decltype(func(args...));
+            while (!is_running_)
+                continue;
+
+            auto task = std::make_shared<std::packaged_task<RType()>>(
+                std::bind(std::forward<Func>(func), std::forward<Args>(args)...)
+            );
+            std::future<RType> result = task->get_future();
+            {
+                std::unique_lock<std::mutex> lock(mutex_);
+                func_ = [task]{
+                    (*task)();
+                };
+            }
+            cond_running_.notify_all();
+            return result;
+        }
+
+        template <typename Func, typename Obj, typename... Args>
+        std::future<typename std::result_of<Func(Obj, Args...)>::type>
+            SetThreadFunc(Func&& func, Obj&& obj, Args&&... args)
+        {
+            using RType = typename std::result_of<Func(Obj, Args...)>::type;
+            while (!is_running_)
+                continue;
+
+            auto task = std::make_shared<std::packaged_task<RType()>>(
+                std::bind(std::forward<Func>(func), std::forward<Obj>(obj),
+                    std::forward<Args>(args)...)
+            );
+            std::future<RType> result = task->get_future();
+            {
+                std::unique_lock<std::mutex> lock(mutex_);
+                func_ = [task]{
+                    (*task)();
+                };
+            }
+            cond_running_.notify_all();
+            return result;
+        }
     private:
-        sys_thread_t thread_;
-        SysThreadFunc_t func_;
-        void* arg_;
+        void ThreadFunc();
+    private:
+        std::function<void()> func_ = nullptr;
+        std::thread thread_;
+        bool is_running_ = false;
+        std::condition_variable cond_running_;  // 通知线程有任务到来
+        bool exit_ = false;
+        std::mutex mutex_;
     };
 }
 

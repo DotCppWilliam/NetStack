@@ -1,20 +1,77 @@
 #include "sys_plat.h"
 #include "pcap.h"
+#include "net_err.h"
+
 #include <arpa/inet.h>
 #include <cerrno>
+#include <climits>
 #include <cstdint>
 #include <cstdio>
+#include <limits>
+#include <mutex>
+#include <netdb.h>
 #include <netinet/in.h>
 #include <pthread.h>
 #include <sys/socket.h>
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
-
+#include <ifaddrs.h>
 
 namespace lpcap 
 {
     ////////////////////////////////////////////////// PcapNICDriver
+    PcapNICDriver::~PcapNICDriver()
+    {
+        for (auto& device : devices_)
+            pcap_close(device);
+    }
+
+
+    bool PcapNICDriver::OpenAllDefaultDevice()
+    {
+        pcap_if_t* all_devices, *dev;
+        pcap_t* handle;
+        char err_buf[PCAP_ERRBUF_SIZE];
+
+        if (pcap_findalldevs(&all_devices, err_buf) == -1)
+        {
+            // 日志: TODO: 
+            return false;
+        }
+        
+        struct ifaddrs* ifaddr, *ifa;
+        if (getifaddrs(&ifaddr) == -1)
+        {
+            printf("getifaddrs failed");
+            return false;
+        }
+
+        // 逐个打开网络接口
+        for (dev = all_devices; dev != nullptr; dev = dev->next)
+        {
+            for (ifa = ifaddr; ifa != nullptr; ifa = ifa->ifa_next)
+            {
+                if (ifa->ifa_addr == nullptr)   
+                    continue;
+
+                if (!strcmp(dev->name, ifa->ifa_name) && ifa->ifa_addr->sa_family == AF_INET)
+                {
+                    handle = pcap_open_live(dev->name, std::numeric_limits<int>::max(), 1, 1000, err_buf);
+                    if (handle == nullptr)
+                    {
+                        // TODO: 日志输出: 打开网卡失败
+                        return false;
+                    }
+                    devices_.push_back(handle);
+                }
+            }
+        }
+        printf("打开网卡成功\n");
+        return true;
+    }
+
+
     /**
     * @brief 获取IP地址的设备名称
     * 
@@ -131,15 +188,16 @@ namespace lpcap
     * @param mac_addr 
     * @return pcap_t* 
     */
-    pcap_t* PcapNICDriver::DeviceOpen(const uint8_t* mac_addr)
+    net::NetErr_t PcapNICDriver::DeviceOpen(const uint8_t* mac_addr)
     {
+        pcap_t* device = nullptr;
         // 利用上层传来的ip地址
         char name_buf[256];
         if (!FindDevice(name_buf))
         {
             fprintf(stderr, "pcap查找失败: 没有网卡包含此IP: {%s}\n", ip_);
             ShowList();
-            return nullptr;
+            return net::NET_ERR_IO;
         }
         
         // 根据名称获取ip地址、掩码等
@@ -154,55 +212,55 @@ namespace lpcap
         }
 
         // 打开设备
-        pcap_t* pcap = pcap_create(name_buf, err_buf);
-        if (pcap == nullptr)
+        device = pcap_create(name_buf, err_buf);
+        if (device == nullptr)
         {
             fprintf(stderr, "pcap_create: 创建pcap失败 %s\n网卡名: %s", err_buf, name_buf);
             fprintf(stderr, "使用以下内容:\n");
             ShowList();
-            return nullptr;
+            return net::NET_ERR_IO;
         }
 
         // 设置捕获的数据包的最大长度
-        if (pcap_set_snaplen(pcap, 65536) != 0)
+        if (pcap_set_snaplen(device, 65536) != 0)
         {
-            fprintf(stderr, "pcap_set_snaplen error: %s\n", pcap_geterr(pcap));
-            return nullptr;
+            fprintf(stderr, "pcap_set_snaplen error: %s\n", pcap_geterr(device));
+            return net::NET_ERR_IO;
         }
 
         // 设置网络接口为混杂模式,即捕获所有经过网络接口的数据包
-        if (pcap_set_promisc(pcap, 1) != 0)
+        if (pcap_set_promisc(device, 1) != 0)
         {
-            fprintf(stderr, "pcap_set_promisc error: %s\n", pcap_geterr(pcap));
-            return nullptr;
+            fprintf(stderr, "pcap_set_promisc error: %s\n", pcap_geterr(device));
+            return net::NET_ERR_IO;
         }
 
         // 设置捕获数据包的超时时间
-        if (pcap_set_timeout(pcap, 0) != 0)
+        if (pcap_set_timeout(device, 0) != 0)
         {
-            fprintf(stderr, "pcap_set_timeout error: %s\n", pcap_geterr(pcap));
-            return nullptr;
+            fprintf(stderr, "pcap_set_timeout error: %s\n", pcap_geterr(device));
+            return net::NET_ERR_IO;
         }
 
         // 设置为立即模式,即立即返回读取到的数据包,而不会等待缓冲区满或超时
-        if (pcap_set_immediate_mode(pcap, 1) != 0)
+        if (pcap_set_immediate_mode(device, 1) != 0)
         {
-            fprintf(stderr, "pcap_set_immediate_mode error: %s\n", pcap_geterr(pcap));
-            return nullptr;
+            fprintf(stderr, "pcap_set_immediate_mode error: %s\n", pcap_geterr(device));
+            return net::NET_ERR_IO;
         }
 
         // 激活设备,使其处于工作状态
-        if (pcap_activate(pcap) != 0)
+        if (pcap_activate(device) != 0)
         {
-            fprintf(stderr, "pcap_activate error: %s\n", pcap_geterr(pcap));
-            return nullptr;
+            fprintf(stderr, "pcap_activate error: %s\n", pcap_geterr(device));
+            return net::NET_ERR_IO;
         }
 
         // 设置为非阻塞模式,使得读取数据包不会阻塞当前线程
-        if (pcap_setnonblock(pcap, 0, err_buf) != 0)
+        if (pcap_setnonblock(device, 0, err_buf) != 0)
         {
-            fprintf(stderr, "pcap_setnonblock error: %s\n", pcap_geterr(pcap));
-            return nullptr;
+            fprintf(stderr, "pcap_setnonblock error: %s\n", pcap_geterr(device));
+            return net::NET_ERR_IO;
         }
 
         // 只捕获发往本接口与广播的数据帧,相当于只处理发往这张网卡的包
@@ -215,20 +273,21 @@ namespace lpcap
             mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
         
         // 编译过滤规则字符串,将其转换为pcap中使用的内部表示形式
-        if (pcap_compile(pcap, &fp, filter_exp, 0, net) == -1)
+        if (pcap_compile(device, &fp, filter_exp, 0, net) == -1)
         {
-            printf("pcap_open: 无法解析过滤器 %s:%s\n", filter_exp, pcap_geterr(pcap));
-            return nullptr;
+            printf("pcap_open: 无法解析过滤器 %s:%s\n", filter_exp, pcap_geterr(device));
+            return net::NET_ERR_IO;
         }
         
         // 用于将编译好的过滤器应用
-        if (pcap_setfilter(pcap, &fp) == -1)
+        if (pcap_setfilter(device, &fp) == -1)
         {
-            printf("pcap_open: 不能安装过滤器: %s:%s\n", filter_exp, pcap_geterr(pcap));
-            return nullptr;
+            printf("pcap_open: 不能安装过滤器: %s:%s\n", filter_exp, pcap_geterr(device));
+            return net::NET_ERR_IO;
         }
 
-        return pcap;
+        devices_.push_back(device);
+        return net::NET_ERR_OK;
     }
 
 
@@ -311,23 +370,35 @@ namespace lpcap
 
 
     ////////////////////////////////////////////////// SysThread
-    bool SysThread::Create()
-    {
-        int err = pthread_create(&thread_, nullptr, (void*(*)(void*))func_, arg_);
-        if (err)
-            return false;
-
-        pthread_join(thread_, nullptr);
-        return true;
+    void Thread::Start()
+    {   
+        if (is_running_)
+            return;
+        thread_ = std::thread(&Thread::ThreadFunc, this);
+        thread_.detach();
     }
 
-    void SysThread::Sleep(int ms)
+    void Thread::Stop()
     {
-        usleep(1000 * ms);
+        if (!is_running_)
+            return;
+        exit_ = true;
     }
 
-
-    sys_thread_t SysThread::Self()
-    { return pthread_self(); }
+    void Thread::ThreadFunc()
+    {
+        is_running_ = true;
+        while (!exit_)
+        {
+            {
+                std::unique_lock<std::mutex> lock(mutex_);
+                cond_running_.wait(lock);
+                if (func_ == nullptr)   
+                    continue;
+            }
+            func_();
+            func_ = nullptr;
+        }
+    }
 
 }
