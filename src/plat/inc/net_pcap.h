@@ -3,9 +3,9 @@
 #include "../../net/inc/net_err.h"
 #include "sys_plat.h"
 
-namespace lpcap 
+namespace netstack 
 {
-    net::NetErr_t NetIfPcapOpen();
+    NetErr_t NetIfPcapOpen();
 
     class NetifPcap 
     {
@@ -28,7 +28,7 @@ namespace lpcap
          * 
          * @return net::NetErr_t 
          */
-        net::NetErr_t OpenDevice();
+        NetErr_t OpenDevice();
     private:
         Thread recv_thread_; // 接收网卡数据的线程
         Thread send_thread_; // 向网卡发送数据的线程

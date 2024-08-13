@@ -1,10 +1,10 @@
 
 #include "loop.h"
-#include "PacketBuffer.h"
+#include "packet_buffer.h"
 #include "net_err.h"
 #include "net_interface.h"
 
-namespace net 
+namespace netstack 
 {
 
     NetIfLoop::NetIfLoop()

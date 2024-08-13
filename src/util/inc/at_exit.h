@@ -5,7 +5,7 @@
 #include "auto_lock.h"
 
 
-namespace util 
+namespace netstack 
 {
     class AtExitManager
     {

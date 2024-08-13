@@ -1,5 +1,7 @@
 #pragma once
 
+#include "packet_buffer.h"
+#include "ipaddr.h"
 #include "net_err.h"
 #include <condition_variable>
 #include <functional>
@@ -45,7 +47,7 @@ enum NetIfType {
 };
 
 
-namespace lpcap 
+namespace netstack 
 {
     typedef struct x_sys_sem_t {
         int count_;                 // 信号量计数
@@ -61,21 +63,44 @@ namespace lpcap
     class PcapNICDriver
     {
     public:
-        PcapNICDriver(const char* ip) : ip_(ip) {}
-        PcapNICDriver() {}
+        PcapNICDriver();
         ~PcapNICDriver();
 
-        bool FindDevice(char* name_buf);
+        bool FindDevice(const char* ip, char* name_buf);
         bool ShowList();
-        net::NetErr_t DeviceOpen(const uint8_t* mac_addr);
-        bool OpenAllDefaultDevice();
         bool IsOpened() const 
-        {
-            return devices_.empty();
-        }
+        { return devices_.empty(); }
+        pcap_t* GetNetworkPtr(std::string name = "", std::string ip = "", NetIfType type = NETIF_TYPE_NONE);
+    
+        static NetErr_t SendData(pcap_t* netif, std::shared_ptr<PacketBuffer>& pkt);
+        static NetErr_t RecvData(pcap_t* netif, std::shared_ptr<PacketBuffer>& pkt);
     private:
-        const char* ip_;
-        std::vector<pcap_t*> devices_;
+        NetErr_t DeviceOpen(const char* ip, const uint8_t* mac_addr);
+        bool OpenAllDefaultDevice();
+    private:
+        // 用于描述实际网卡信息
+        struct NetInfo 
+        {
+            void SetIp(struct ifaddrs* ifa)
+            { ip = Sockaddr2str(ifa); }
+
+            void SetType(std::string name)
+            {
+                if (name.empty())
+                    type = NETIF_TYPE_NONE;
+                else if (name.find("enp") != std::string::npos)
+                    type = NETIF_TYPE_ETHER;
+                else
+                    type = NETIF_TYPE_LOOP;
+            }
+
+            std::string ip;     // 网卡地址
+            std::string name;   // 网卡名称
+            NetIfType type;     // 网卡类型: 是普通网卡还是回环网卡
+            pcap_t* device = nullptr;   // 操作网卡的指针
+        };
+    private:
+        std::vector<NetInfo> devices_;
     };
 
 

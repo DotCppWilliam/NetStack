@@ -3,7 +3,7 @@
 #include "net_err.h"
 #include "net_interface.h"
 
-namespace net 
+namespace netstack 
 {
     class NetIfLoop : public NetInterface
     {

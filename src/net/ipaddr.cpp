@@ -1,11 +1,14 @@
 #include "ipaddr.h"
 #include "net_err.h"
 
+#include <arpa/inet.h>
 #include <cstring>
 #include <cstdio>
 #include <cstdlib>
+#include <sys/socket.h>
 
-namespace net 
+
+namespace netstack 
 {
     NetErr_t IpAddr2Str(IpAddr& src_addr, std::string& dst_str)
     {
@@ -68,5 +71,18 @@ namespace net
         
         dst_addr = addr;
         return NET_ERR_OK;
+    }
+
+
+
+    std::string Sockaddr2str(struct ifaddrs* addr)
+    {
+        std::string ret;
+        struct sockaddr_in* saddr = reinterpret_cast<struct sockaddr_in*>(addr->ifa_addr);
+        char buf[256] = "";
+        inet_ntop(AF_INET, &saddr->sin_addr, buf, sizeof(buf));
+        ret = buf;
+
+        return ret;
     }
 }

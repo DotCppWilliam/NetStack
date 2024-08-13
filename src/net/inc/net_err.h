@@ -1,6 +1,6 @@
 #pragma once
 
-namespace net 
+namespace netstack 
 {
     enum NetErr_t 
     {

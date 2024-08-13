@@ -3,7 +3,7 @@
 
 #include <cassert>
 
-namespace util 
+namespace netstack 
 {
     static AtExitManager* g_top_manager = nullptr;
 

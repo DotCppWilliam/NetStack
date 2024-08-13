@@ -1,38 +1,75 @@
 #include "sys_plat.h"
+#include "packet_buffer.h"
+#include "ipaddr.h"
 #include "pcap.h"
 #include "net_err.h"
+#include "util.h"
 
 #include <arpa/inet.h>
+#include <cassert>
 #include <cerrno>
 #include <climits>
 #include <cstdint>
 #include <cstdio>
 #include <limits>
+#include <memory>
 #include <mutex>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <pthread.h>
+#include <stdexcept>
 #include <sys/socket.h>
 #include <string.h>
 #include <stdlib.h>
+#include <sys/types.h>
 #include <unistd.h>
 #include <ifaddrs.h>
+#include <exception>
 
-namespace lpcap 
+namespace netstack 
 {
+    #define GET_NETIF_FROM_HAS_TYPE(ret, only_key1, only_key2, key3) \
+        do { \
+            for (auto& info : devices_) { \
+                if (!only_key1.empty()) { \
+                    if (info.only_key1 == only_key1 && info.key3 == key3) { \
+                        ret = info.device; \
+                        return ret; \
+                    } \
+                } \
+                else { \
+                    if (info.only_key2 == only_key1 && info.key3 == key3) { \
+                        ret = info.device; \
+                        return ret; \
+                    } \
+                } \
+            } \
+        } while(0)
+
+
+
+
     ////////////////////////////////////////////////// PcapNICDriver
     PcapNICDriver::~PcapNICDriver()
     {
         for (auto& device : devices_)
-            pcap_close(device);
+            pcap_close(device.device);
     }
 
+
+    PcapNICDriver::PcapNICDriver()
+    {
+        bool ret = OpenAllDefaultDevice();
+        if (!ret)
+            throw std::runtime_error("open network card failed");
+    }
 
     bool PcapNICDriver::OpenAllDefaultDevice()
     {
         pcap_if_t* all_devices, *dev;
         pcap_t* handle;
         char err_buf[PCAP_ERRBUF_SIZE];
+        NetInfo info;
 
         if (pcap_findalldevs(&all_devices, err_buf) == -1)
         {
@@ -63,12 +100,50 @@ namespace lpcap
                         // TODO: 日志输出: 打开网卡失败
                         return false;
                     }
-                    devices_.push_back(handle);
+                    info.ip = Sockaddr2str(ifa);   // 记录ip地址
+                    info.SetType(dev->name);            // 设置网卡类型
+                    info.name = dev->name;                  // 记录网卡名称
+                    info.device = handle;                   // 设置网卡操作的指针
+
+                    devices_.push_back(info);   // TODO:
                 }
             }
         }
         printf("打开网卡成功\n");
         return true;
+    }
+
+
+    pcap_t* PcapNICDriver::GetNetworkPtr(std::string name, std::string ip, NetIfType type)
+    {
+        pcap_t* ret = nullptr;
+        if (type != NETIF_TYPE_NONE)
+        {
+            assert(!name.empty() || !ip.empty());
+            GET_NETIF_FROM_HAS_TYPE(ret, name, ip, type);
+        }    
+        
+        for (auto& info : devices_)
+        {
+            if (!name.empty())
+            {
+                if (info.name == name)
+                {
+                    ret = info.device;
+                    break;
+                }
+            }
+            else 
+            {
+                if (info.ip == ip)
+                {
+                    ret = info.device;
+                    break;
+                }
+            }
+        }
+
+        return ret;
     }
 
 
@@ -78,10 +153,10 @@ namespace lpcap
     * @param name_buf 找到的设备名称
     * @return bool true: 成功找到, false: 查找失败 
     */
-    bool PcapNICDriver::FindDevice(char* name_buf)
+    bool PcapNICDriver::FindDevice(const char* ip, char* name_buf)
     {
         struct in_addr dest_ip;
-        inet_pton(AF_INET, ip_, &dest_ip);
+        inet_pton(AF_INET, ip, &dest_ip);
 
         // 获取所有接口列表
         char err_buf[PCAP_BUF_SIZE];
@@ -188,16 +263,17 @@ namespace lpcap
     * @param mac_addr 
     * @return pcap_t* 
     */
-    net::NetErr_t PcapNICDriver::DeviceOpen(const uint8_t* mac_addr)
+    NetErr_t PcapNICDriver::DeviceOpen(const char* ip, const uint8_t* mac_addr)
     {
         pcap_t* device = nullptr;
+        NetInfo info;
         // 利用上层传来的ip地址
         char name_buf[256];
-        if (!FindDevice(name_buf))
+        if (!FindDevice(ip, name_buf))
         {
-            fprintf(stderr, "pcap查找失败: 没有网卡包含此IP: {%s}\n", ip_);
+            fprintf(stderr, "pcap查找失败: 没有网卡包含此IP: {%s}\n", ip);
             ShowList();
-            return net::NET_ERR_IO;
+            return NET_ERR_IO;
         }
         
         // 根据名称获取ip地址、掩码等
@@ -218,49 +294,49 @@ namespace lpcap
             fprintf(stderr, "pcap_create: 创建pcap失败 %s\n网卡名: %s", err_buf, name_buf);
             fprintf(stderr, "使用以下内容:\n");
             ShowList();
-            return net::NET_ERR_IO;
+            return NET_ERR_IO;
         }
 
         // 设置捕获的数据包的最大长度
         if (pcap_set_snaplen(device, 65536) != 0)
         {
             fprintf(stderr, "pcap_set_snaplen error: %s\n", pcap_geterr(device));
-            return net::NET_ERR_IO;
+            return NET_ERR_IO;
         }
 
         // 设置网络接口为混杂模式,即捕获所有经过网络接口的数据包
         if (pcap_set_promisc(device, 1) != 0)
         {
             fprintf(stderr, "pcap_set_promisc error: %s\n", pcap_geterr(device));
-            return net::NET_ERR_IO;
+            return NET_ERR_IO;
         }
 
         // 设置捕获数据包的超时时间
         if (pcap_set_timeout(device, 0) != 0)
         {
             fprintf(stderr, "pcap_set_timeout error: %s\n", pcap_geterr(device));
-            return net::NET_ERR_IO;
+            return NET_ERR_IO;
         }
 
         // 设置为立即模式,即立即返回读取到的数据包,而不会等待缓冲区满或超时
         if (pcap_set_immediate_mode(device, 1) != 0)
         {
             fprintf(stderr, "pcap_set_immediate_mode error: %s\n", pcap_geterr(device));
-            return net::NET_ERR_IO;
+            return NET_ERR_IO;
         }
 
         // 激活设备,使其处于工作状态
         if (pcap_activate(device) != 0)
         {
             fprintf(stderr, "pcap_activate error: %s\n", pcap_geterr(device));
-            return net::NET_ERR_IO;
+            return NET_ERR_IO;
         }
 
         // 设置为非阻塞模式,使得读取数据包不会阻塞当前线程
         if (pcap_setnonblock(device, 0, err_buf) != 0)
         {
             fprintf(stderr, "pcap_setnonblock error: %s\n", pcap_geterr(device));
-            return net::NET_ERR_IO;
+            return NET_ERR_IO;
         }
 
         // 只捕获发往本接口与广播的数据帧,相当于只处理发往这张网卡的包
@@ -276,21 +352,81 @@ namespace lpcap
         if (pcap_compile(device, &fp, filter_exp, 0, net) == -1)
         {
             printf("pcap_open: 无法解析过滤器 %s:%s\n", filter_exp, pcap_geterr(device));
-            return net::NET_ERR_IO;
+            return NET_ERR_IO;
         }
         
         // 用于将编译好的过滤器应用
         if (pcap_setfilter(device, &fp) == -1)
         {
             printf("pcap_open: 不能安装过滤器: %s:%s\n", filter_exp, pcap_geterr(device));
-            return net::NET_ERR_IO;
+            return NET_ERR_IO;
         }
 
-        devices_.push_back(device);
-        return net::NET_ERR_OK;
+        info.device = device;
+        devices_.push_back(info);   // TODO:
+        return NET_ERR_OK;
     }
 
 
+    NetErr_t PcapNICDriver::SendData(pcap_t* netif, std::shared_ptr<PacketBuffer>& pkt)
+    {
+        if (netif == nullptr)
+        {
+            // TODO: 日志输出
+            return NET_ERR_PARAM;
+        }
+        
+        //u_char* data_mem = new u_char[pkt->GetDataSize()];
+        int data_size = pkt->DataSize();
+        unsigned char* data_mem = new unsigned char[data_size];
+        pkt->Read(data_mem, data_size);   // 进行一次网络数据包拷贝
+        DumpHex(data_mem, data_size);
+
+        // 向网卡发送数据
+        int i = pcap_inject(netif, data_mem, data_size);   
+        if (i == -1)
+        {
+            const char* err_str = pcap_geterr(netif);
+            printf("err: %s\n", err_str);
+        }
+        
+        delete [] data_mem;
+        return NET_ERR_OK;
+    }
+    
+    NetErr_t PcapNICDriver::RecvData(pcap_t* netif, std::shared_ptr<PacketBuffer>& pkt)
+    {
+        if (netif == nullptr)
+        {
+            // TODO: 日志输出
+            return NET_ERR_PARAM;
+        }
+        struct pcap_pkthdr* pkthdr;
+        const uint8_t* pkt_data;
+
+        while (true)
+        {
+            int ret = pcap_next_ex(netif, &pkthdr, &pkt_data);  // 从网卡读取数据
+            if (ret == 0)
+                continue;
+            if (ret == -1)
+            {
+                const char* err_str = pcap_geterr(netif);
+                // TODO: 日志输出
+                continue;
+            }
+
+            DumpHex(pkt_data, pkthdr->len);
+            pkt = std::make_shared<PacketBuffer>(); // 创建数据包存放网络数据
+            // 复制网络数据包,发生一次拷贝(无法避免,因为下一次pcap读取数据会将上一次内存清空)
+            pkt->Write(pkt_data, pkthdr->len);
+
+            // TODO: 向消息队列写入消息
+
+            break;
+        }
+        return NET_ERR_OK;
+    }
 
 
 

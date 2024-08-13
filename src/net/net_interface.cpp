@@ -1,9 +1,11 @@
 #include "net_interface.h"
-#include "PacketBuffer.h"
+#include "packet_buffer.h"
+#include "net.h"
 #include "net_err.h"
+#include "sys_plat.h"
 #include <memory>
 
-namespace net 
+namespace netstack 
 {   
     std::list<NetInterface*> NetInterface::netif_lists_;
     NetInterface* NetInterface::default_netif_;
@@ -12,8 +14,7 @@ namespace net
     NetInterface* kDefaultNetIf = nullptr;
 
     NetInterface::NetInterface(void* arg, const char* device_name, int queue_max_threshold)
-        : node_(nullptr), 
-        state_(NETIF_CLOSED),
+        : state_(NETIF_CLOSED),
         mtu_(0),
         queue_max_threshold_(0),
         ops_data_(arg),
@@ -21,7 +22,9 @@ namespace net
         recv_queue_(queue_max_threshold),
         send_queue_(queue_max_threshold)
     {
-
+        PcapNICDriver* driver = NetInit::GetInstance()->GetNICDriver();
+        netif_ = driver->GetNetworkPtr(device_name);
+        default_netif_ = this;  // 默认指向当前网卡
     }
 
     NetInterface::~NetInterface()
@@ -139,7 +142,7 @@ namespace net
 
     NetErr_t NetInterface::PushPacket(std::shared_ptr<PacketBuffer> pkt, bool is_recv_queue, bool wait)
     {
-        util::ConcurrentQueue<std::shared_ptr<PacketBuffer>>* queue;
+        ConcurrentQueue<std::shared_ptr<PacketBuffer>>* queue;
         if (is_recv_queue)
             queue = &recv_queue_;
         else 
@@ -164,7 +167,7 @@ namespace net
     NetErr_t NetInterface::PopPacket(std::shared_ptr<PacketBuffer>, bool is_recv_queue, bool wait)
     {
         std::shared_ptr<PacketBuffer> pkt;
-        util::ConcurrentQueue<std::shared_ptr<PacketBuffer>>* queue;
+        ConcurrentQueue<std::shared_ptr<PacketBuffer>>* queue;
         if (is_recv_queue)
             queue = &recv_queue_;
         else 

@@ -1,6 +1,6 @@
 #include "singlton.h"
 
-namespace util 
+namespace netstack 
 {
     /**
      * @brief 

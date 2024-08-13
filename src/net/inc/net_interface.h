@@ -1,10 +1,10 @@
 #pragma once
 
-#include "PacketBuffer.h"
+#include "packet_buffer.h"
 #include "ipaddr.h"
 #include "net_err.h"
-#include "node.h"
 #include "concurrent_queue.h"
+#include "pcap.h"
 #include "sys_plat.h"
 
 #include <string>
@@ -12,7 +12,7 @@
 
 #define DEFAULT_TX_QUEUE_LEN 10000
 
-namespace net 
+namespace netstack 
 {
     enum NetIfState
     {
@@ -53,16 +53,18 @@ namespace net
         IpAddr gateway_;                // 网关
         NetIfType type_;                // 网卡类型: 回环网卡、
         unsigned long long mtu_;        // 网卡传输数据包最大字节
-        Node* node_;                    // 指向下一个网卡
         NetIfState state_;              // 当前网卡状态
 
-        util::ConcurrentQueue<std::shared_ptr<PacketBuffer>> recv_queue_;   // 接收数据包队列
-        util::ConcurrentQueue<std::shared_ptr<PacketBuffer>> send_queue_;   // 发送数据包队列
+        NetInterface* prev_;            // 指向上一个网卡
+        NetInterface* next_;            // 指向下一个网卡
+
+        ConcurrentQueue<std::shared_ptr<PacketBuffer>> recv_queue_;   // 接收数据包队列
+        ConcurrentQueue<std::shared_ptr<PacketBuffer>> send_queue_;   // 发送数据包队列
         int queue_max_threshold_ = 1000;        // 队列存储数据包最大个数
         void* ops_data_;        // 数据
+        pcap_t* netif_ = nullptr;
 
         static NetInterface* default_netif_;
         static std::list<NetInterface*> netif_lists_;
-        lpcap::PcapNICDriver* driver_;  // 网卡驱动: 打开、关闭网卡
     };
 }

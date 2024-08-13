@@ -5,15 +5,15 @@
 
 #include <list>
 
-namespace net 
+namespace netstack 
 {
     class MemBlock 
     {
     public:
 
     private:
-        lpcap::SysSemaphore alloc_sem_;
-        util::AutoLock lock_; 
+        SysSemaphore alloc_sem_;
+        AutoLock lock_; 
         // 链表
         
     };

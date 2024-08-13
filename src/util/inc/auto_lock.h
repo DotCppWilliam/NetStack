@@ -2,7 +2,7 @@
 
 #include <mutex>
 
-namespace util
+namespace netstack
 {
     class Mutex 
     {

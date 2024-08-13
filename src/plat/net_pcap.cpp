@@ -1,14 +1,14 @@
 #include "net_pcap.h"
 
 
-namespace lpcap
+namespace netstack
 {
-    net::NetErr_t NetifPcap::OpenDevice()
+    NetErr_t NetifPcap::OpenDevice()
     {
         recv_thread_.Start();
         send_thread_.Start();
 
-        return net::NET_ERR_OK;
+        return NET_ERR_OK;
     }
 
     void NetifPcap::SendThread(void* arg)

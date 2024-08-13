@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cstdint>
-namespace util 
+namespace netstack 
 {
     #ifdef __x86_64
         using AtomicWord = uint64_t;

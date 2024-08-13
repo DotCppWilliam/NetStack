@@ -8,7 +8,7 @@
 #include <stdexcept>
 #include <type_traits>
 
-namespace util 
+namespace netstack 
 {
     constexpr size_t kDefaultCapacity = 1024;
 

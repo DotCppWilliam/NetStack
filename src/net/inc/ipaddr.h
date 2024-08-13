@@ -3,8 +3,9 @@
 #include "net_err.h"
 #include <cstdint>
 #include <string>
+#include <ifaddrs.h>
 
-namespace net 
+namespace netstack 
 {
     #define IPV4_ADDR_SIZE  4
     enum AddrType {
@@ -46,4 +47,7 @@ namespace net
      * @return NetErr_t 返回NET_ERR_OK表示成功
      */
     NetErr_t Str2IpAddr(std::string& src_str, IpAddr& dst_addr);
+
+
+    std::string Sockaddr2str(struct ifaddrs* addr);
 }

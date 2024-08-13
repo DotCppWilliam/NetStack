@@ -3,7 +3,7 @@
 #include "atomic_cmps.h"
 #include "at_exit.h"
 
-namespace util
+namespace netstack
 {
     static const AtomicWord  kBeingCreatedMarker = 1;
 

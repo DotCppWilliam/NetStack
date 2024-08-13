@@ -2,7 +2,7 @@
 #include "net_err.h"
 
 
-namespace net 
+namespace netstack 
 {
     NetErr_t NetInit::Init()
     {

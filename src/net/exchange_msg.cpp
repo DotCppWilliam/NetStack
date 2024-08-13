@@ -2,7 +2,7 @@
 #include "net_err.h"
 #include "sys_plat.h"
 
-namespace net 
+namespace netstack 
 {
     NetErr_t ExchangeMsg::Init()
     {
