@@ -37,5 +37,6 @@ namespace netstack
             printf("%02x ", data[i]);
             fflush(stdout);
         }
+        printf("\n");
     }
 }

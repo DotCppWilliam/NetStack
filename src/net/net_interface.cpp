@@ -1,6 +1,6 @@
 #include "net_interface.h"
-#include "packet_buffer.h"
 #include "net.h"
+#include "packet_buffer.h"
 #include "net_err.h"
 #include "sys_plat.h"
 #include <memory>
@@ -18,12 +18,10 @@ namespace netstack
         mtu_(0),
         queue_max_threshold_(0),
         ops_data_(arg),
-        name_(device_name),
+        name_(device_name), device_(nullptr),
         recv_queue_(queue_max_threshold),
         send_queue_(queue_max_threshold)
     {
-        PcapNICDriver* driver = NetInit::GetInstance()->GetNICDriver();
-        netif_ = driver->GetNetworkPtr(device_name);
         default_netif_ = this;  // 默认指向当前网卡
     }
 
@@ -159,7 +157,7 @@ namespace netstack
                 return NET_ERR_FULL;
         }
 
-        // exmsg 通知消息 TODO:
+        NetInit::GetInstance()->GetExchangeMsg()->SendMsg(this, is_recv_queue);
         return NET_ERR_OK;
     }
 

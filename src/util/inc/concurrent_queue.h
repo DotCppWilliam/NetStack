@@ -72,7 +72,7 @@ namespace netstack
     {
     public:
         ConcurrentQueue(size_t capacity = kDefaultCapacity, const Allocator& allocator = Allocator())
-            : capacity_(capacity), allocator_(allocator)
+            : capacity_(capacity), allocator_(allocator), head_(0), tail_(0)
         {
             if (capacity < 1)
                 throw std::invalid_argument("capacity < 1");

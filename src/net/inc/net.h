@@ -1,6 +1,7 @@
 #pragma once
 
 #include "net_err.h"
+#include "net_interface.h"
 #include "net_pcap.h"
 #include "singlton.h"
 #include "exchange_msg.h"
@@ -8,11 +9,14 @@
 
 namespace netstack 
 {   
+    std::list<NetInterface*> list;
     class NetInit 
     {
     public:
-        NetInit() 
+        NetInit()     // TODO: 构造pcap_传入所有网卡信息的list
+            : pcap_(list)   // TODO: 临时解决编译报错
         {
+            
             
         }
         ~NetInit()
@@ -26,11 +30,14 @@ namespace netstack
 
         PcapNICDriver* GetNICDriver()
         { return &driver_; }
+
+        ExchangeMsg* GetExchangeMsg() 
+        { return &exchange_msg_; }
     private:
         NetErr_t Init();
         NetErr_t Start();
         bool initialized_ = false;
-        ExchangeMsg exchange_msg_;
+        ExchangeMsg exchange_msg_;  // 消息队列
         NetifPcap pcap_;
         PcapNICDriver driver_;
     };

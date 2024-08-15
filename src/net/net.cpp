@@ -6,11 +6,7 @@ namespace netstack
 {
     NetErr_t NetInit::Init()
     {
-        if (exchange_msg_.Init() != NET_ERR_OK)
-        {
-            // 日志
-            throw "NetInit::Init(): initialization exchange msg failed";
-        }
+        // TODO: 初始化交换消息
 
         if (pcap_.OpenDevice() != NET_ERR_OK)
         {

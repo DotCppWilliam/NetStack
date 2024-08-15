@@ -1,25 +1,29 @@
 #include "exchange_msg.h"
-#include "net_err.h"
+#include "auto_lock.h"
 #include "sys_plat.h"
 
 namespace netstack 
 {
-    NetErr_t ExchangeMsg::Init()
+    ExchangeMsg::ExchangeMsg()
     {
-        // lpcap::SysThread thread(&ExchangeMsg::ThreadFunc, nullptr);
-        // if (!thread.Create())
-        //     return NET_ERR_SYS;
-
-        return NET_ERR_OK;
+        work_thread_.SetThreadFunc(&ExchangeMsg::WorkThreadFunc, this, nullptr);
     }
 
-    
-
-    void ExchangeMsg::ThreadFunc(void* arg)
+    ExchangeMsg::~ExchangeMsg()
     {
-        while (true)
-        {
-            plat_sleep(1);
-        }
+
+    }
+    
+    void ExchangeMsg::SendMsg(NetInterface* netif, bool recv_pkt)
+    {
+        AutoLock lock(lock_);
+        msg_deque_.push_back({ netif, recv_pkt });
+    }
+
+    void ExchangeMsg::WorkThreadFunc(void* arg)
+    {
+        // 工作线程, 处理数据包
+        // TODO:
+
     }
 }

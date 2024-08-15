@@ -105,7 +105,7 @@ namespace netstack
                     info.name = dev->name;                  // 记录网卡名称
                     info.device = handle;                   // 设置网卡操作的指针
 
-                    devices_.push_back(info);   // TODO:
+                    devices_.push_back(info);   
                 }
             }
         }
@@ -367,7 +367,13 @@ namespace netstack
         return NET_ERR_OK;
     }
 
-
+    /**
+     * @brief 向网卡发送数据包.发送完成,将参数PacketBuffer内存释放.
+     * 
+     * @param netif 
+     * @param pkt 
+     * @return NetErr_t 
+     */
     NetErr_t PcapNICDriver::SendData(pcap_t* netif, std::shared_ptr<PacketBuffer>& pkt)
     {
         if (netif == nullptr)
@@ -390,7 +396,8 @@ namespace netstack
             printf("err: %s\n", err_str);
         }
         
-        delete [] data_mem;
+        pkt.reset();    // 释放掉要发送数据包的内存
+        delete [] data_mem; // 释放临时内存
         return NET_ERR_OK;
     }
     
