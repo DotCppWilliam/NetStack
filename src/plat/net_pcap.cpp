@@ -1,16 +1,18 @@
 #include "net_pcap.h"
+#include "arp.h"
+#include "ether.h"
 #include "net_interface.h"
 #include "packet_buffer.h"
 #include "pcap.h"
 
 #include <memory>
+#include <mutex>
 #include <stdexcept>
 #include <sys/epoll.h>
 
 namespace netstack
 {
     std::list<NetInterface*> NetifPcap::kAllNetIf;
-
 
 
     NetifPcap::NetifPcap(std::list<NetInterface*> list_netif)
@@ -95,6 +97,40 @@ namespace netstack
                 
             }
         }
+    }
+
+    // 设置期望的arp请求包
+    void NetifPcap::SetExpectedArpReply(uint32_t ipaddr, std::shared_ptr<PacketBuffer>* set_ptr)
+    {
+        std::unique_lock<std::mutex> lock(mutex_);
+        arp_reply_set_.insert( { ipaddr, set_ptr });
+    }
+
+
+    bool NetifPcap::IsExpectedArpResponse(std::shared_ptr<PacketBuffer> pkt)
+    {
+        EtherHdr* hdr = pkt->GetObjectPtr<EtherHdr>();
+        if (hdr->protocol == ETHER_TYPE_ARP)    // 是arp包
+        {
+            // 获取其中的arp包
+            Arp* arp = pkt->GetObjectPtr<Arp>(sizeof(EtherHdr));
+            if (arp->op_code == ARP_REPLAY) // 如果是arp响应包
+            {
+                uint32_t ipaddr = *(uint32_t*)arp->dst_ipaddr;
+                std::unique_lock<std::mutex> lock(mutex_);
+                
+                // 判断是否是arp模块想要的响应包
+                auto it = arp_reply_set_.find(ipaddr);
+                if (it != arp_reply_set_.end())
+                {
+                    (*it->second) = pkt;
+                    arp_reply_set_.erase(it);
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
 }

@@ -26,7 +26,7 @@ namespace netstack
     public:
         TimeEntry()
         { 
-            value_ = { -1, -1 }; // 初始化 秒和微妙为-1
+            value_ =  {-1, -1}; // 初始化 秒和微妙为-1
         }
 
         // 拷贝构造函数

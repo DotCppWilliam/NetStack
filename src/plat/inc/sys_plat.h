@@ -75,7 +75,8 @@ namespace netstack
                 type = NETIF_TYPE_LOOP;
         }
 
-        std::string ip;     // 网卡地址
+        std::string ip;     // 网卡ip地址
+        std::string mac;    // 网卡mac地址
         std::string name;   // 网卡名称
         NetIfType type;     // 网卡类型: 是普通网卡还是回环网卡
         pcap_t* device = nullptr;   // 操作网卡的指针
@@ -90,7 +91,7 @@ namespace netstack
 
         bool FindDevice(const char* ip, char* name_buf);
         bool ShowList();
-        pcap_t* GetNetworkPtr(std::string name = "", std::string ip = "", NetIfType type = NETIF_TYPE_NONE);
+        NetInfo* GetNetworkPtr(std::string name = "", std::string ip = "", NetIfType type = NETIF_TYPE_NONE);
 
         bool IsOpened() const 
         { return devices_.empty(); }

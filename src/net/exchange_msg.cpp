@@ -14,10 +14,10 @@ namespace netstack
 
     }
     
-    void ExchangeMsg::SendMsg(NetInterface* netif, bool recv_pkt)
+    void ExchangeMsg::SendMsg(NetInterface* netif, MsgType pkt_type)
     {
         AutoLock lock(lock_);
-        msg_deque_.push_back({ netif, recv_pkt });
+        msg_deque_.push_back({ netif, pkt_type });
     }
 
     void ExchangeMsg::WorkThreadFunc(void* arg)

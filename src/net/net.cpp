@@ -37,5 +37,9 @@ namespace netstack
             // 日志
             throw "NetInit::Initialization(): start failed";
         }
+
+        // TODO: 初始化定时器
+        // TODO: 初始化网络接口
+        
     }
 }

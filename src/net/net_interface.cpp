@@ -7,7 +7,6 @@
 
 namespace netstack 
 {   
-    std::list<NetInterface*> NetInterface::netif_lists_;
     NetInterface* NetInterface::default_netif_;
 
     // 默认发送数据包的网卡
@@ -48,7 +47,7 @@ namespace netstack
         // TODO: 关闭操作
 
         state_ = NETIF_CLOSED;
-        netif_lists_.remove(this);
+        kNetIfLists.remove(this);
         return NET_ERR_OK;
     }
 
@@ -157,7 +156,7 @@ namespace netstack
                 return NET_ERR_FULL;
         }
 
-        NetInit::GetInstance()->GetExchangeMsg()->SendMsg(this, is_recv_queue);
+        NetInit::GetInstance()->GetExchangeMsg()->SendMsg(this, MSG_TYPE_RECV_PKT);
         return NET_ERR_OK;
     }
 

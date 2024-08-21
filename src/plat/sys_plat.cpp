@@ -18,6 +18,7 @@
 #include <netinet/in.h>
 #include <pthread.h>
 #include <stdexcept>
+#include <string>
 #include <sys/socket.h>
 #include <string.h>
 #include <stdlib.h>
@@ -25,6 +26,8 @@
 #include <unistd.h>
 #include <ifaddrs.h>
 #include <exception>
+#include <unordered_map>
+#include <netpacket/packet.h>
 
 namespace netstack 
 {
@@ -33,13 +36,13 @@ namespace netstack
             for (auto& info : devices_) { \
                 if (!only_key1.empty()) { \
                     if (info.only_key1 == only_key1 && info.key3 == key3) { \
-                        ret = info.device; \
+                        ret = &info; \
                         return ret; \
                     } \
                 } \
                 else { \
                     if (info.only_key2 == only_key1 && info.key3 == key3) { \
-                        ret = info.device; \
+                        ret = &info; \
                         return ret; \
                     } \
                 } \
@@ -64,12 +67,16 @@ namespace netstack
             throw std::runtime_error("open network card failed");
     }
 
+
+    
+    
     bool PcapNICDriver::OpenAllDefaultDevice()
     {
         pcap_if_t* all_devices, *dev;
         pcap_t* handle;
         char err_buf[PCAP_ERRBUF_SIZE];
         NetInfo info;
+        std::unordered_map<std::string, std::string> mac_map;
 
         if (pcap_findalldevs(&all_devices, err_buf) == -1)
         {
@@ -84,6 +91,7 @@ namespace netstack
             return false;
         }
 
+        
         // 逐个打开网络接口
         for (dev = all_devices; dev != nullptr; dev = dev->next)
         {
@@ -91,7 +99,15 @@ namespace netstack
             {
                 if (ifa->ifa_addr == nullptr)   
                     continue;
-
+                
+                // 记录网卡mac地址
+                if (ifa->ifa_addr->sa_family == AF_PACKET)
+                {
+                    if (mac_map.find(ifa->ifa_name) == mac_map.end())
+                        mac_map.insert( { ifa->ifa_name, Mac2Str(ifa)});
+                }
+                
+                // 设置网卡ip地址、名字、子网掩码等信息
                 if (!strcmp(dev->name, ifa->ifa_name) && ifa->ifa_addr->sa_family == AF_INET)
                 {
                     handle = pcap_open_live(dev->name, std::numeric_limits<int>::max(), 1, 1000, err_buf);
@@ -100,23 +116,24 @@ namespace netstack
                         // TODO: 日志输出: 打开网卡失败
                         return false;
                     }
-                    info.ip = Sockaddr2str(ifa);   // 记录ip地址
+                    info.ip = Sockaddr2str(ifa);        // 记录ip地址
                     info.SetType(dev->name);            // 设置网卡类型
                     info.name = dev->name;                  // 记录网卡名称
                     info.device = handle;                   // 设置网卡操作的指针
-
                     devices_.push_back(info);   
                 }
             }
         }
-        printf("打开网卡成功\n");
+        for (auto& device : devices_)
+            device.mac = mac_map.find(device.name)->second;
+        
         return true;
     }
 
 
-    pcap_t* PcapNICDriver::GetNetworkPtr(std::string name, std::string ip, NetIfType type)
+    NetInfo* PcapNICDriver::GetNetworkPtr(std::string name, std::string ip, NetIfType type)
     {
-        pcap_t* ret = nullptr;
+        NetInfo* ret = nullptr;
         if (type != NETIF_TYPE_NONE)
         {
             assert(!name.empty() || !ip.empty());
@@ -129,7 +146,7 @@ namespace netstack
             {
                 if (info.name == name)
                 {
-                    ret = info.device;
+                    ret = &info;
                     break;
                 }
             }
@@ -137,7 +154,7 @@ namespace netstack
             {
                 if (info.ip == ip)
                 {
-                    ret = info.device;
+                    ret = &info;
                     break;
                 }
             }

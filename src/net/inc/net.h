@@ -9,7 +9,9 @@
 
 namespace netstack 
 {   
-    std::list<NetInterface*> list;
+    static std::list<NetInterface*> list { nullptr};
+
+    struct NetInfo;
     class NetInit 
     {
     public:
@@ -33,6 +35,17 @@ namespace netstack
 
         ExchangeMsg* GetExchangeMsg() 
         { return &exchange_msg_; }
+
+        NetifPcap* GetNetifPcap()
+        { 
+            return &pcap_;
+        }
+        NetInfo* GetNetworkInfo(std::string name = "", std::string ip = "",
+                       NetIfType type = NETIF_TYPE_NONE)
+        {
+            driver_.GetNetworkPtr(name, ip, type);
+            return nullptr;
+        }
     private:
         NetErr_t Init();
         NetErr_t Start();

@@ -37,17 +37,32 @@ namespace netstack
      * @param dst_addr 
      * @return NetErr_t 
      */
-    NetErr_t IpAddr2Str(IpAddr& src_addr, std::string& dst_str);
+    NetErr_t IpAddr2Str(IpAddr src_addr, std::string& dst_str);
 
-    /**
-     * @brief 将字符串转换成IpAddr结构, 比如192.168.1.1转换成 IpAddr{ 192, 168, 1, 1}这样数组
-     * 
-     * @param src_addr 
-     * @param dst_str 
-     * @return NetErr_t 返回NET_ERR_OK表示成功
-     */
-    NetErr_t Str2IpAddr(std::string& src_str, IpAddr& dst_addr);
+    std::string Ip2Str(uint8_t ip[4]);
+    
+    void IpStr2Ip(std::string ip_str, uint8_t ip[4]);
 
+    void MacStr2Mac(std::string mac_str, uint8_t mac[6]);
 
     std::string Sockaddr2str(struct ifaddrs* addr);
+
+    std::string Mac2Str(struct ifaddrs* ifa);
+
+    template <typename T, std::size_t N>
+    void EndianConversion(T(&arr)[N], bool need_conver = true)
+    {
+        if (need_conver == false) return;
+        size_t size = sizeof(arr) / sizeof(char);
+
+        // 0x1234 5678 -> 0x7856 3412
+        for (size_t beg = 0, rbeg = size - 1; beg <= rbeg; ++beg, --rbeg)
+        {
+            char tmp = arr[beg];
+            arr[beg] = arr[rbeg];
+            arr[rbeg] = tmp;
+        }
+    }
+
+
 }

@@ -67,6 +67,7 @@ namespace netstack
         void* ops_data_;        // 数据
 
         static NetInterface* default_netif_;
-        static std::list<NetInterface*> netif_lists_;
     };
+
+    static std::list<NetInterface*> kNetIfLists;
 }

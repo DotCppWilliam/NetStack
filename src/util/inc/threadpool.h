@@ -15,6 +15,20 @@
 #include <thread>
 #include <unordered_map>
 
+/*
+    线程数量如何确定:
+        CPU 密集型任务: 建议线程数量与CPU核心数量相等或略多.因为每个线程需要CPU时间片,
+            如果线程数量过多,可能会引发频繁的上下文切换,反而降低性能
+        IO密集型任务: 比如网络请求、文件读写等.线程数可以增加到CPU核心数量的两倍甚至更多,
+            这是因为IO操作通常会阻塞线程,增加线程可以提高系统的并发能力
+    
+    如果任务执行时间较短,那么设置较少的线程数
+    如果执行任务时间长,且任务之间没有太多依赖,可以增加线程数提高并行处理能力.
+    经验法则:
+        线程数 = CPU核心数 + 1(适用于密集型) 或者
+        线程数 = CPU核心数 * 2(IO密集型)
+*/
+
 const int kTaskMaxThreshold = 512;
 const int kThreadMaxThreshold = 1024;
 const int kThreadMaxIdleTime = 60;

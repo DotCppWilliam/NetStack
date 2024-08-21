@@ -70,6 +70,19 @@ namespace netstack
         }
     }
 
+    void PacketBlock::CopyData(PacketBlock* src_pkt, int offset, size_t size)
+    {
+        unsigned char* start_ptr = src_pkt->data_ + offset;
+        memcpy(data_, start_ptr, size);
+    }
+
+    PacketBlock* PacketBlock::CuttingPacket(PacketBlock* block, int offset, size_t size)
+    {
+        PacketBlock* after_block = AllocateBlock(size);
+        after_block->CopyData(block, offset, size);
+
+        return after_block;
+    }
 
 
     PacketBlock* AllocateBlock(size_t size)
@@ -84,6 +97,8 @@ namespace netstack
         return block;
     }
 
+
+    
 
 
 
@@ -122,19 +137,60 @@ namespace netstack
         return 0;
     }
 
-    int PacketBuffer::RemoveHeader()
+    int AddTail(size_t, const unsigned char*)
+    {
+
+        return 0;
+    }
+
+    int PacketBuffer::RemoveHeader(size_t size)
     {
         if (blocks_.empty())
             return -1;
+        PacketBlock* block = blocks_.front();
+        
+        if (block->TotalSize() > size)
+        {
+            // 拆分
+            blocks_.pop_front();
+            // 丢弃开头size字节大小的数据
+            PacketBlock* after_cutting_pkt = 
+                PacketBlock::CuttingPacket(block, size, block->TotalSize() - size);
+            blocks_.push_front(after_cutting_pkt);
+            delete block;
+        }
+        else if (block->TotalSize() == size)
+        {
+            blocks_.pop_front();
+            delete block;
+        }
+        else if (block->TotalSize() < size)
+            return -1;
+        
+        return 0;
+    }
 
-        PacketBlock* head = *blocks_.begin();
-        blocks_.pop_front();
-        
-        if (head->next_)
-            head->next_->prev_ = nullptr;
-        
-        
-        delete head;
+    int PacketBuffer::RemoveTail(size_t size)
+    {
+        if (blocks_.empty())
+            return -1;
+        PacketBlock* tail = blocks_.back();
+        if (tail->TotalSize() < size)
+            return -1;
+        else if (tail->TotalSize() == size)
+        {
+            blocks_.pop_back();
+            delete tail;
+        }
+        else if (tail->TotalSize() > size)
+        {
+            blocks_.pop_back();
+            // 不要末尾size大小的字节数据
+            PacketBlock* after_cutting_pkt = 
+                PacketBlock::CuttingPacket(tail, 0, tail->TotalSize() - size);
+        }
+
+
 
         return 0;
     }
@@ -212,7 +268,7 @@ namespace netstack
 
 
 
-    void PacketBuffer::CreateBlock(size_t size)
+    PacketBlock* PacketBuffer::CreateBlock(size_t size)
     {
         PacketBlock* block = nullptr;
         size_t alloc_mem_size = AlignUp<size_t>(size);
@@ -222,5 +278,7 @@ namespace netstack
         block->SetPrevNode(curr_block_);
         curr_block_ = block;
         total_size_ += alloc_mem_size;
+
+        return block;
     }
 }

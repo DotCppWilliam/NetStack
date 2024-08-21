@@ -3,7 +3,11 @@
 #include "net_err.h"
 #include "net_interface.h"
 #include "noncopyable.h"
+#include "packet_buffer.h"
 #include "sys_plat.h"
+#include <cstdint>
+#include <memory>
+#include <unordered_map>
 
 namespace netstack 
 {
@@ -27,12 +31,18 @@ namespace netstack
          */
         NetErr_t OpenDevice();
 
+        void SetExpectedArpReply(uint32_t ipaddr, std::shared_ptr<PacketBuffer>* set_ptr);
+
         static std::list<NetInterface*> kAllNetIf;
+    private:
+        bool IsExpectedArpResponse(std::shared_ptr<PacketBuffer> pkt);
     private:
         Thread recv_thread_; // 接收网卡数据的线程
         Thread send_thread_; // 向网卡发送数据的线程
         PcapNICDriver driver;// 默认打开全部网卡
         int recv_epollfd_;
         bool exit_ = false;
+        std::mutex mutex_;
+        std::unordered_map<uint32_t, std::shared_ptr<PacketBuffer>*> arp_reply_set_;   // 存储想要获取的arp包, 存放的想要获取mac地址的ip地址
     };
 }
