@@ -80,7 +80,7 @@ namespace netstack
      * @return true 
      * @return false 
      */
-    bool ArpPush(uint8_t src_ip[4], uint8_t src_mac[6], uint32_t dst_ip, uint8_t dst_mac[6]);
+    bool ArpPush(uint8_t in_src_ip[4], uint8_t in_dst_ip[4], uint8_t out_dst_mac[6]);
 
     /**
      * @brief 提供给下层(以太网)的接口,用来处理ARP

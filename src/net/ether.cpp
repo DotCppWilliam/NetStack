@@ -1,24 +1,54 @@
 #include "ether.h"
+#include "arp.h"
+#include "ip.h"
+#include "ipaddr.h"
+#include "net.h"
 #include "net_interface.h"
+#include "sys_plat.h"
 
+#include <cstdint>
 #include <cstring>
+#include <unordered_map>
 
 namespace netstack 
 {
-    extern std::list<NetInterface*> kNetIfLists;
+    std::unordered_map<uint32_t, NetInterface*> kNetInterfaces;
 
     bool EtherPush(std::shared_ptr<PacketBuffer> pkt, PROTO_TYPE type)
     {
-        EtherHdr* hdr = pkt->AllocateObject<EtherHdr>();
-        hdr->protocol = type;
-        // TODO: 设置源mac和目标mac
+        EtherHdr ether_hdr;
+        ether_hdr.protocol = type;
+        if (type == ETHER_TYPE_IPV4)
+        {
+            IPV4_Hdr* ipv4_hdr = pkt->GetObjectPtr<IPV4_Hdr>();
+            NetInfo* src_ip_info = NetInit::GetInstance()->GetNetworkInfo("", Ip2Str((uint8_t*)&ipv4_hdr->src_ipaddr));
+            IpStr2Ip(src_ip_info->ip, ether_hdr.src_addr);
 
+            bool ret = ArpPush((uint8_t*)&ipv4_hdr->src_ipaddr, (uint8_t*)&ipv4_hdr->dst_ipaddr, ether_hdr.dst_addr);
+            if (ret == false)
+            {
+                pkt.reset();
+                return false;
+            }
+
+            EtherHdr* hdr_ptr = pkt->AllocateObject<EtherHdr>();
+            *hdr_ptr = ether_hdr;
+            hdr_ptr->data = ipv4_hdr;
+        }
+        else 
+        {
+            Arp* arp = pkt->GetObjectPtr<Arp>();
+            memcpy(ether_hdr.src_addr, arp->src_hwaddr, sizeof(ether_hdr.src_addr));
+            memcpy(ether_hdr.dst_addr, arp->dst_hwaddr, sizeof(ether_hdr.dst_addr));
+        }
         
+        auto it = kNetInterfaces.find(*(uint32_t*)&ether_hdr.dst_addr);
+        it->second->PushPacket(pkt);
 
         return true;
     }
 
-
+    // TODO: 暂时用不上
     bool EtherPop(std::shared_ptr<PacketBuffer>& pkt)
     {
 

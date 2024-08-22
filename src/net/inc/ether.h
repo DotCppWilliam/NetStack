@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <memory>
 #include <netinet/in.h>
+#include <cstring>
 
 namespace netstack
 {
@@ -32,6 +33,17 @@ namespace netstack
 // 以太网协议头
     struct EtherHdr
     {
+        EtherHdr& operator=(const EtherHdr& hdr)
+        {
+            if (&hdr == this)
+                return *this;
+            memcpy(dst_addr, hdr.dst_addr, sizeof(dst_addr));
+            memcpy(src_addr, hdr.src_addr, sizeof(src_addr));
+            protocol = hdr.protocol;
+            data = hdr.data;
+
+            return *this;
+        }
         uint8_t     dst_addr[6];    // 目标地址
         uint8_t     src_addr[6];    // 源地址
         uint16_t    protocol;       // 协议类型或长度
