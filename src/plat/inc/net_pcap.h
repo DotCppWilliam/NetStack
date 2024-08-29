@@ -1,7 +1,6 @@
 #pragma once
 
 #include "net_err.h"
-#include "net_interface.h"
 #include "noncopyable.h"
 #include "packet_buffer.h"
 #include "sys_plat.h"
@@ -15,10 +14,12 @@ namespace netstack
 
     class NetInterface;
 
+    void PrintAll();
+
     class NetifPcap : NonCopyable
     {
     public:
-        NetifPcap(std::list<NetInterface*>);
+        NetifPcap();
         ~NetifPcap();
 
         void SendThread(void* arg);
@@ -32,13 +33,11 @@ namespace netstack
         NetErr_t OpenDevice();
 
         void SetExpectedArpReply(uint32_t ipaddr, std::shared_ptr<PacketBuffer>* set_ptr);
-
-        static std::list<NetInterface*> kAllNetIf;
     private:
         bool IsExpectedArpResponse(std::shared_ptr<PacketBuffer> pkt);
     private:
-        Thread recv_thread_; // 接收网卡数据的线程
-        Thread send_thread_; // 向网卡发送数据的线程
+        CustomThread recv_thread_; // 接收网卡数据的线程
+        CustomThread send_thread_; // 向网卡发送数据的线程
         PcapNICDriver driver;// 默认打开全部网卡
         int recv_epollfd_;
         bool exit_ = false;

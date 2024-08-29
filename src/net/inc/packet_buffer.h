@@ -6,6 +6,8 @@
 #include <cstddef>
 #include <sys/types.h>
 #include <cstdio>
+#include <cstdint>
+#include <type_traits>
 
 namespace netstack 
 {   
@@ -68,9 +70,6 @@ namespace netstack
 
 
 
-
-
-
     class PacketBuffer : NonCopyable
     {
     public:
@@ -98,11 +97,15 @@ namespace netstack
             return reinterpret_cast<T*>(block->GetDataPtr());
         }
 
-        template <typename T>
+        template <typename T = uint8_t>
         T* GetObjectPtr()
         {
             if (blocks_.empty())
                 return nullptr;
+            
+            if (std::is_same<T, uint8_t>::value)
+                return reinterpret_cast<T*>(blocks_.front());
+
             size_t type_size = sizeof(T);
             PacketBlock* head = blocks_.front();
             if (head->TotalSize() < type_size)

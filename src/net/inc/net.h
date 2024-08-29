@@ -6,6 +6,7 @@
 #include "singlton.h"
 #include "exchange_msg.h"
 #include "sys_plat.h"
+#include "timer.h"
 
 namespace netstack 
 {   
@@ -15,44 +16,39 @@ namespace netstack
     class NetInit 
     {
     public:
-        NetInit()     // TODO: 构造pcap_传入所有网卡信息的list
-            : pcap_(list)   // TODO: 临时解决编译报错
-        {
-            
-            
-        }
-        ~NetInit()
-        {
-
-        }
+        NetInit();
+        ~NetInit();
+    public:
         static NetInit* GetInstance()
         {  return Singleton<NetInit>::get(); }
 
-        void Initialization();
-
         PcapNICDriver* GetNICDriver()
-        { return &driver_; }
+        { return driver_; }
 
         ExchangeMsg* GetExchangeMsg() 
-        { return &exchange_msg_; }
+        { return exchange_msg_; }
 
-        NetifPcap* GetNetifPcap()
+        NetifPcap* GetMsgWorker()
         { 
-            return &pcap_;
+            return msg_worker_;
         }
-        NetInfo* GetNetworkInfo(std::string name = "", std::string ip = "",
+
+        NetInfo* GetNetworkInfo(uint32_t ip = 0, std::string name = "",
                        NetIfType type = NETIF_TYPE_NONE)
         {
-            driver_.GetNetworkPtr(name, ip, type);
+            driver_->GetNetworkPtr(name, ip, type);
             return nullptr;
         }
-    private:
-        NetErr_t Init();
-        NetErr_t Start();
-        bool initialized_ = false;
-        ExchangeMsg exchange_msg_;  // 消息队列
-        NetifPcap pcap_;
-        PcapNICDriver driver_;
-    };
 
+        Timer* GetTimer() 
+        { return timer_; }
+        
+        NetErr_t Init();
+    private:
+        bool initialized_ = false;
+        ExchangeMsg* exchange_msg_;  // 消息队列
+        NetifPcap* msg_worker_;
+        PcapNICDriver* driver_ = nullptr;
+        Timer* timer_ = nullptr;
+    };
 }

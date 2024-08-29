@@ -49,20 +49,7 @@ namespace netstack
 
     std::string Mac2Str(struct ifaddrs* ifa);
 
-    template <typename T, std::size_t N>
-    void EndianConversion(T(&arr)[N], bool need_conver = true)
-    {
-        if (need_conver == false) return;
-        size_t size = sizeof(arr) / sizeof(char);
-
-        // 0x1234 5678 -> 0x7856 3412
-        for (size_t beg = 0, rbeg = size - 1; beg <= rbeg; ++beg, --rbeg)
-        {
-            char tmp = arr[beg];
-            arr[beg] = arr[rbeg];
-            arr[rbeg] = tmp;
-        }
-    }
+    std::string Mac2Str(uint8_t mac[6]);
 
 
 }

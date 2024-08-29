@@ -1,7 +1,6 @@
 #include "ether.h"
 #include "arp.h"
-#include "ip.h"
-#include "ipaddr.h"
+#include "ipv4.h"
 #include "net.h"
 #include "net_interface.h"
 #include "sys_plat.h"
@@ -18,11 +17,10 @@ namespace netstack
     {
         EtherHdr ether_hdr;
         ether_hdr.protocol = type;
-        if (type == ETHER_TYPE_IPV4)
+        if (type == TYPE_IPV4)
         {
             IPV4_Hdr* ipv4_hdr = pkt->GetObjectPtr<IPV4_Hdr>();
-            NetInfo* src_ip_info = NetInit::GetInstance()->GetNetworkInfo("", Ip2Str((uint8_t*)&ipv4_hdr->src_ipaddr));
-            IpStr2Ip(src_ip_info->ip, ether_hdr.src_addr);
+            NetInfo* src_ip_info = NetInit::GetInstance()->GetNetworkInfo(ipv4_hdr->src_ipaddr);
 
             bool ret = ArpPush((uint8_t*)&ipv4_hdr->src_ipaddr, (uint8_t*)&ipv4_hdr->dst_ipaddr, ether_hdr.dst_addr);
             if (ret == false)

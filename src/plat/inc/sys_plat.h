@@ -1,7 +1,6 @@
 #pragma once
 
 #include "packet_buffer.h"
-#include "ipaddr.h"
 #include "net_err.h"
 #include <condition_variable>
 #include <functional>
@@ -60,11 +59,9 @@ namespace netstack
 
 
     // 用于描述实际网卡信息
+    #pragma pack(1)
     struct NetInfo 
     {
-        void SetIp(struct ifaddrs* ifa)
-        { ip = Sockaddr2str(ifa); }
-
         void SetType(std::string name)
         {
             if (name.empty())
@@ -75,12 +72,14 @@ namespace netstack
                 type = NETIF_TYPE_LOOP;
         }
 
-        std::string ip;     // 网卡ip地址
-        std::string mac;    // 网卡mac地址
-        std::string name;   // 网卡名称
+        uint8_t ip[4];      // 网卡ip地址
+        uint8_t netmask[4]; // 网卡mac地址
+        uint8_t mac[6];     // 网卡名称
+        std::string name;   // 子网掩码
         NetIfType type;     // 网卡类型: 是普通网卡还是回环网卡
         pcap_t* device = nullptr;   // 操作网卡的指针
     };
+    #pragma pack()
 
     // pcap网卡驱动
     class PcapNICDriver
@@ -91,12 +90,12 @@ namespace netstack
 
         bool FindDevice(const char* ip, char* name_buf);
         bool ShowList();
-        NetInfo* GetNetworkPtr(std::string name = "", std::string ip = "", NetIfType type = NETIF_TYPE_NONE);
+        NetInfo* GetNetworkPtr(std::string name = "", uint32_t ip = 0, NetIfType type = NETIF_TYPE_NONE);
 
         bool IsOpened() const 
         { return devices_.empty(); }
 
-        std::vector<NetInfo>* GetDevices()
+        std::vector<NetInfo*>* GetDevices()
         { return &devices_; }
 
         static NetErr_t SendData(pcap_t* netif, std::shared_ptr<PacketBuffer>& pkt);
@@ -106,7 +105,8 @@ namespace netstack
         bool OpenAllDefaultDevice();
     
     private:
-        std::vector<NetInfo> devices_;
+        NetInfo* loop_device_ = nullptr;
+        std::vector<NetInfo*> devices_;
     };
 
 
@@ -133,11 +133,11 @@ namespace netstack
 
 
     // 线程
-    class Thread
+    class CustomThread
     {
     public:
-        Thread() {}
-        ~Thread() {}
+        CustomThread() {}
+        ~CustomThread() {}
 
         void Start();
         void Stop();

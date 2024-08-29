@@ -118,6 +118,16 @@ namespace netstack
         return ret;
     }
 
+    std::string Socknetmask2str(struct ifaddrs* netmask)
+    {
+        std::string ret;
+        struct sockaddr_in* saddr = reinterpret_cast<struct sockaddr_in*>(netmask->ifa_netmask);
+        char buf[256] = "";
+        inet_ntop(AF_INET, &saddr->sin_addr, buf, sizeof(buf));
+        ret = buf;
+
+        return ret;
+    }
 
 
     void print_mac_address(const unsigned char *mac, std::string& mac_str) 
@@ -137,6 +147,15 @@ namespace netstack
         
         snprintf(str.data(), str.size(), "%02x:%02x:%02x:%02x:%02x:%02x",
             s->sll_addr[0], s->sll_addr[1], s->sll_addr[2], s->sll_addr[3], s->sll_addr[4], s->sll_addr[5]);
+        return str;
+    }
+
+
+    std::string Mac2Str(uint8_t mac[6])
+    {
+        std::string str(256, ' ');
+        snprintf(str.data(), str.size(), "%02x:%02x:%02x:%02x:%02x:%02x",
+            mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
         return str;
     }
 

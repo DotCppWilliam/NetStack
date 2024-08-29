@@ -4,7 +4,6 @@
 #include "ipaddr.h"
 #include "net_err.h"
 #include "concurrent_queue.h"
-#include "pcap.h"
 #include "sys_plat.h"
 
 #include <string>
@@ -22,11 +21,15 @@ namespace netstack
         NETIF_DEACTIVE,
     };
 
+    class NetInterface;
+    
+
+    void InitNetInterfaces(std::vector<NetInfo*>* devices);
 
     class NetInterface 
     {
     public:
-        NetInterface(void* arg, const char* device_name, int queue_max_threshold = DEFAULT_TX_QUEUE_LEN);
+        NetInterface(void* arg, const char* device_name, NetInfo* netinfo, int queue_max_threshold = DEFAULT_TX_QUEUE_LEN);
         ~NetInterface();
     public:
         virtual NetErr_t Open(void* arg);
@@ -42,8 +45,8 @@ namespace netstack
         
         // 暂时没用 TODO:
         NetErr_t Out(IpAddr& addr, std::shared_ptr<PacketBuffer> pkt);
-        pcap_t* GetNetIf()
-        { return device_; }
+        NetInfo* GetNetInfo()
+        { return netinfo_; }
         
         NetErr_t PushPacket(std::shared_ptr<PacketBuffer> pkt, bool is_recv_queue = true, bool wait = false);
         NetErr_t PopPacket(std::shared_ptr<PacketBuffer> pkt, bool is_recv_queue = true, bool wait = false);
@@ -56,7 +59,7 @@ namespace netstack
         NetIfType type_;                // 网卡类型: 回环网卡、
         unsigned long long mtu_;        // 网卡传输数据包最大字节
         NetIfState state_;              // 当前网卡状态
-        pcap_t* device_;
+        NetInfo* netinfo_;
 
         NetInterface* prev_;            // 指向上一个网卡
         NetInterface* next_;            // 指向下一个网卡
@@ -69,5 +72,4 @@ namespace netstack
         static NetInterface* default_netif_;
     };
 
-    static std::list<NetInterface*> kNetIfLists;
 }

@@ -1,6 +1,5 @@
 #include "sys_plat.h"
 #include "packet_buffer.h"
-#include "ipaddr.h"
 #include "pcap.h"
 #include "net_err.h"
 #include "util.h"
@@ -31,32 +30,13 @@
 
 namespace netstack 
 {
-    #define GET_NETIF_FROM_HAS_TYPE(ret, only_key1, only_key2, key3) \
-        do { \
-            for (auto& info : devices_) { \
-                if (!only_key1.empty()) { \
-                    if (info.only_key1 == only_key1 && info.key3 == key3) { \
-                        ret = &info; \
-                        return ret; \
-                    } \
-                } \
-                else { \
-                    if (info.only_key2 == only_key1 && info.key3 == key3) { \
-                        ret = &info; \
-                        return ret; \
-                    } \
-                } \
-            } \
-        } while(0)
-
-
 
 
     ////////////////////////////////////////////////// PcapNICDriver
     PcapNICDriver::~PcapNICDriver()
     {
         for (auto& device : devices_)
-            pcap_close(device.device);
+            pcap_close(device->device);
     }
 
 
@@ -75,8 +55,8 @@ namespace netstack
         pcap_if_t* all_devices, *dev;
         pcap_t* handle;
         char err_buf[PCAP_ERRBUF_SIZE];
-        NetInfo info;
-        std::unordered_map<std::string, std::string> mac_map;
+        NetInfo* info = nullptr;
+        std::unordered_map<std::string, uint64_t> mac_map;
 
         if (pcap_findalldevs(&all_devices, err_buf) == -1)
         {
@@ -104,7 +84,12 @@ namespace netstack
                 if (ifa->ifa_addr->sa_family == AF_PACKET)
                 {
                     if (mac_map.find(ifa->ifa_name) == mac_map.end())
-                        mac_map.insert( { ifa->ifa_name, Mac2Str(ifa)});
+                    {
+                        struct sockaddr_ll* sll = (struct sockaddr_ll*)ifa->ifa_addr;
+                        uint64_t mac = 0;
+                        memcpy(&mac, sll->sll_addr, sizeof(char) * 6);
+                        mac_map.insert( { ifa->ifa_name, mac });
+                    }
                 }
                 
                 // 设置网卡ip地址、名字、子网掩码等信息
@@ -116,51 +101,68 @@ namespace netstack
                         // TODO: 日志输出: 打开网卡失败
                         return false;
                     }
-                    info.ip = Sockaddr2str(ifa);        // 记录ip地址
-                    info.SetType(dev->name);            // 设置网卡类型
-                    info.name = dev->name;                  // 记录网卡名称
-                    info.device = handle;                   // 设置网卡操作的指针
+
+                    info = new NetInfo;
+                // 记录ip地址
+                    struct sockaddr_in* addr = reinterpret_cast<struct sockaddr_in*>(ifa->ifa_addr);
+                    *(uint32_t*)info->ip = addr->sin_addr.s_addr;
+                // 记录子网掩码
+                    struct sockaddr_in* netmask = reinterpret_cast<struct sockaddr_in*>(ifa->ifa_netmask);
+                    *(uint32_t*)info->netmask = netmask->sin_addr.s_addr;
+                // 设置网卡类型    
+                    info->SetType(dev->name);
+                // 记录网卡名称
+                    info->name = dev->name;
+                // 设置网卡操作的指针
+                    info->device = handle;
                     devices_.push_back(info);   
+                    if (info->type == NETIF_TYPE_LOOP)
+                        loop_device_ = devices_.back();
                 }
             }
         }
         for (auto& device : devices_)
-            device.mac = mac_map.find(device.name)->second;
+        {
+            uint64_t mac = mac_map.find(device->name)->second;
+            memcpy(device->mac, &mac, sizeof(char) * 6);
+        }
         
         return true;
     }
 
 
-    NetInfo* PcapNICDriver::GetNetworkPtr(std::string name, std::string ip, NetIfType type)
+    NetInfo* PcapNICDriver::GetNetworkPtr(std::string name, uint32_t ip, NetIfType type)
     {
-        NetInfo* ret = nullptr;
-        if (type != NETIF_TYPE_NONE)
-        {
-            assert(!name.empty() || !ip.empty());
-            GET_NETIF_FROM_HAS_TYPE(ret, name, ip, type);
-        }    
-        
-        for (auto& info : devices_)
+        if (name.empty() && ip == 0)
+            return nullptr;
+
+        if (type == NETIF_TYPE_LOOP)
+            return loop_device_;
+
+        NetInfo* info = nullptr;
+        size_t size = devices_.size();
+        for (size_t i = 0; i < size; i++)
         {
             if (!name.empty())
             {
-                if (info.name == name)
+                if (devices_[i]->name == name)
                 {
-                    ret = &info;
+                    info = devices_[i];
                     break;
                 }
             }
-            else 
+            else if (ip != 0)
             {
-                if (info.ip == ip)
+                uint32_t ip_tmp = *(uint32_t*)devices_[i]->ip;
+                if (ip_tmp == ip)
                 {
-                    ret = &info;
+                    info = devices_[i];
                     break;
                 }
             }
         }
 
-        return ret;
+        return info;
     }
 
 
@@ -283,7 +285,7 @@ namespace netstack
     NetErr_t PcapNICDriver::DeviceOpen(const char* ip, const uint8_t* mac_addr)
     {
         pcap_t* device = nullptr;
-        NetInfo info;
+        NetInfo* info;
         // 利用上层传来的ip地址
         char name_buf[256];
         if (!FindDevice(ip, name_buf))
@@ -379,7 +381,7 @@ namespace netstack
             return NET_ERR_IO;
         }
 
-        info.device = device;
+        info->device = device;
         devices_.push_back(info);   // TODO:
         return NET_ERR_OK;
     }
@@ -530,22 +532,22 @@ namespace netstack
 
 
     ////////////////////////////////////////////////// SysThread
-    void Thread::Start()
+    void CustomThread::Start()
     {   
         if (is_running_)
             return;
-        thread_ = std::thread(&Thread::ThreadFunc, this);
+        thread_ = std::thread(&CustomThread::ThreadFunc, this);
         thread_.detach();
     }
 
-    void Thread::Stop()
+    void CustomThread::Stop()
     {
         if (!is_running_)
             return;
         exit_ = true;
     }
 
-    void Thread::ThreadFunc()
+    void CustomThread::ThreadFunc()
     {
         is_running_ = true;
         while (!exit_)

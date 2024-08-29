@@ -3,12 +3,12 @@
 #include "packet_buffer.h"
 #include "net_err.h"
 #include "net_interface.h"
+#include "sys_plat.h"
 
 namespace netstack 
 {
-
-    NetIfLoop::NetIfLoop()
-        : NetInterface(nullptr, "loop")
+    NetIfLoop::NetIfLoop(NetInfo* info)
+        : NetInterface(nullptr, "loop", info)
     {
         SetDefaultNetif(this);  // 设置默认网卡为loop(回环)
     }

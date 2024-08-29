@@ -10,6 +10,7 @@
     type: (IPV4: 0x0800)、(IPV6: 0x86DD)、(ARP: 0x0806)
 */
 
+#include "net_type.h"
 #include "packet_buffer.h"
 #include <cstdint>
 #include <memory>
@@ -18,16 +19,6 @@
 
 namespace netstack
 {
-    enum PROTO_TYPE
-    {
-        ETHER_TYPE_IPV4     = 0x0800,
-        ETHER_TYPE_ARP      = 0x0806,
-        ETHER_TYPE_CVLAN    = 0x8100,
-        ETHER_TYPE_SVLAN    = 0x88A8,
-        ETHER_TYPE_PN       = 0x8892,
-        ETHER_TYPE_NO_SUPPORT
-    };
-
     #pragma pack(1)
 //////////////////////// 以太网
 // 以太网协议头
@@ -61,13 +52,13 @@ namespace netstack
     {
         void SetCTag(int id, int prio = 0, int dei = 0)
         {
-            tpid = htons(ETHER_TYPE_CVLAN);
+            tpid = htons(TYPE_CVLAN);
             SetTci(id, prio, dei);
         }
 
         void SetSTag(int id, int prio = 0, int dei = 0)
         {
-            tpid = htons(ETHER_TYPE_SVLAN);
+            tpid = htons(TYPE_SVLAN);
             SetTci(id, prio, dei);
         }
 
@@ -83,14 +74,14 @@ namespace netstack
         bool IsVlan() const 
         {
             uint16_t type = ntohs(tpid);
-            return type = ETHER_TYPE_CVLAN || type == ETHER_TYPE_SVLAN;
+            return type = TYPE_CVLAN || type == TYPE_SVLAN;
         }
 
         bool IsCVlan() const 
-        { return ntohs(tpid) == ETHER_TYPE_CVLAN; }
+        { return ntohs(tpid) == TYPE_CVLAN; }
 
         bool IsPVlan() const 
-        { return ntohs(tpid) == ETHER_TYPE_SVLAN; }
+        { return ntohs(tpid) == TYPE_SVLAN; }
 
     private:
         void SetTci(int id, int prio, int dei)

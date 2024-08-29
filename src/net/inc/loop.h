@@ -2,13 +2,14 @@
 
 #include "net_err.h"
 #include "net_interface.h"
+#include "sys_plat.h"
 
 namespace netstack 
 {
     class NetIfLoop : public NetInterface
     {
     public:
-        NetIfLoop();
+        NetIfLoop(NetInfo* info);
         ~NetIfLoop();
 
         NetErr_t Open(void* arg) override;

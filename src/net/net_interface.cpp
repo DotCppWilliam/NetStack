@@ -1,4 +1,5 @@
 #include "net_interface.h"
+#include "loop.h"
 #include "net.h"
 #include "packet_buffer.h"
 #include "net_err.h"
@@ -7,17 +8,43 @@
 
 namespace netstack 
 {   
+    extern std::list<NetInterface*> kNetifLists;
+    /**
+     * @brief 初始化网卡接口
+     * 
+     * @param devices 
+     */
+    void InitNetInterfaces(std::vector<NetInfo*>* devices)
+    {
+        size_t size = devices->size();
+        NetInterface* netif = nullptr;
+        for (size_t i = 0; i < size; i++)
+        {
+            if ((*devices)[i]->type == NETIF_TYPE_LOOP)
+                netif = new NetIfLoop((*devices)[i]);
+            else 
+            {
+                netif = new NetInterface(nullptr, 
+                    (*devices)[i]->name.c_str(), (*devices)[i]);
+            
+            }
+            kNetifLists.push_back(netif);
+        }
+    }
+
+
+
     NetInterface* NetInterface::default_netif_;
 
     // 默认发送数据包的网卡
     NetInterface* kDefaultNetIf = nullptr;
 
-    NetInterface::NetInterface(void* arg, const char* device_name, int queue_max_threshold)
+    NetInterface::NetInterface(void* arg, const char* device_name, NetInfo* netinfo, int queue_max_threshold)
         : state_(NETIF_CLOSED),
         mtu_(0),
         queue_max_threshold_(0),
         ops_data_(arg),
-        name_(device_name), device_(nullptr),
+        name_(device_name), netinfo_(netinfo),
         recv_queue_(queue_max_threshold),
         send_queue_(queue_max_threshold)
     {
@@ -47,7 +74,7 @@ namespace netstack
         // TODO: 关闭操作
 
         state_ = NETIF_CLOSED;
-        kNetIfLists.remove(this);
+        kNetifLists.remove(this);
         return NET_ERR_OK;
     }
 

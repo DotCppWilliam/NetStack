@@ -4,20 +4,30 @@
 #include "net_interface.h"
 #include "packet_buffer.h"
 #include "pcap.h"
+#include "sys_plat.h"
 
 #include <memory>
 #include <mutex>
 #include <stdexcept>
 #include <sys/epoll.h>
 
+#include <iostream>
+
 namespace netstack
 {
-    std::list<NetInterface*> NetifPcap::kAllNetIf;
+    std::list<NetInterface*> kNetifLists;
 
-
-    NetifPcap::NetifPcap(std::list<NetInterface*> list_netif)
+    void PrintAll()
     {
-        kAllNetIf = list_netif;
+        for (auto& netif : kNetifLists)
+        {
+            NetInfo* info = netif->GetNetInfo();
+            std::cout << info->name << " : " << std::endl;
+        }
+    }
+    
+    NetifPcap::NetifPcap()
+    {
         recv_thread_.SetThreadFunc(&NetifPcap::RecvThread, this, nullptr);
     }
 
@@ -54,9 +64,9 @@ namespace netstack
 
         struct epoll_event event;
         // 将网卡的接收事件添加到epoll中
-        for (auto& netif : kAllNetIf)
+        for (auto& netif : kNetifLists)
         {
-            int pcap_fd = pcap_fileno(netif->GetNetIf());
+            int pcap_fd = pcap_fileno(netif->GetNetInfo()->device);
             event.events = EPOLLIN;
             event.data.ptr = netif;
             if (epoll_ctl(recv_epollfd_, EPOLL_CTL_ADD, pcap_fd, &event) == -1)
@@ -66,7 +76,7 @@ namespace netstack
             }
         }
         
-        std::vector<struct epoll_event> events(kAllNetIf.size());
+        std::vector<struct epoll_event> events(kNetifLists.size());
         int nfds = 0;
         while (!exit_)
         {
@@ -84,7 +94,7 @@ namespace netstack
                 const u_char* pkt_data;
                 
                 
-                if (pcap_next_ex(netif->GetNetIf(), &pkt_hdr, &pkt_data))   // 成功捕获数据包
+                if (pcap_next_ex(netif->GetNetInfo()->device, &pkt_hdr, &pkt_data))   // 成功捕获数据包
                 {
                     // 其他超时、发生错误等情况则不考虑.只考虑成功情况.保证程序的稳定性
 
@@ -110,7 +120,7 @@ namespace netstack
     bool NetifPcap::IsExpectedArpResponse(std::shared_ptr<PacketBuffer> pkt)
     {
         EtherHdr* hdr = pkt->GetObjectPtr<EtherHdr>();
-        if (hdr->protocol == ETHER_TYPE_ARP)    // 是arp包
+        if (hdr->protocol == TYPE_ARP)    // 是arp包
         {
             // 获取其中的arp包
             Arp* arp = pkt->GetObjectPtr<Arp>(sizeof(EtherHdr));

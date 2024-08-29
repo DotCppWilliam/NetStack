@@ -38,6 +38,6 @@ namespace netstack
     private:
         std::deque<PktMsg> msg_deque_;  // 消息队列
         Lock lock_;
-        Thread work_thread_;    // 工作线程
+        CustomThread work_thread_;    // 工作线程
     };
 }

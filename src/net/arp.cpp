@@ -1,6 +1,5 @@
 #include "arp.h"
 #include "ether.h"
-#include "ipaddr.h"
 #include "net.h"
 #include "net_pcap.h"
 #include "packet_buffer.h"
@@ -22,9 +21,24 @@ namespace netstack
     void SetDefaultArp(Arp* arp)
     {
         arp->hw_type = htons(ARP_HW_ETHER);
-        arp->proto_type = htons(ETHER_TYPE_IPV4);
+        arp->proto_type = htons(TYPE_IPV4);
         arp->hw_addr_size = 6;
         arp->proto_addr_size = 4;
+    }
+
+
+    void ArpHost2Network(Arp* arp)
+    {
+        arp->hw_type = htonl(arp->hw_type);
+        arp->proto_type = htonl(arp->proto_type);
+        arp->op_code = htonl(arp->op_code);
+    }
+
+    void ArpNetwork2Host(Arp* arp)
+    {
+        arp->hw_addr_size = ntohl(arp->hw_addr_size);
+        arp->proto_type = ntohl(arp->proto_type);
+        arp->op_code = ntohl(arp->op_code);
     }
 
     /**
@@ -41,15 +55,13 @@ namespace netstack
         arp->op_code = ARP_REQUEST;
 
         memcpy(arp->src_ipaddr, src_ip, sizeof(arp->src_ipaddr));
-        EndianConversion(arp->src_ipaddr);
 
         memcpy(arp->src_hwaddr, src_mac, sizeof(arp->src_hwaddr));
-        EndianConversion(arp->src_hwaddr);
 
         memset(arp->dst_hwaddr, 0, sizeof(arp->dst_hwaddr));
 
         memcpy(arp->dst_ipaddr, dst_ip, sizeof(arp->dst_ipaddr));
-        EndianConversion(arp->dst_ipaddr);
+        ArpHost2Network(arp);
     }
 
     /**
@@ -65,14 +77,14 @@ namespace netstack
         
         uint8_t ipaddr[4];
         memcpy(ipaddr, arp->dst_ipaddr, sizeof(ipaddr));
-        NetInfo* info = NetInit::GetInstance()->GetNetworkInfo("", Ip2Str(ipaddr));
+        NetInfo* info = NetInit::GetInstance()->GetNetworkInfo(*(uint32_t*)ipaddr);
         if (info == nullptr)
             return false;
 
         Arp tmp_arp = *arp;
         memcpy(arp->src_ipaddr, arp->dst_ipaddr, sizeof(arp->src_ipaddr));
         
-        MacStr2Mac(info->mac, arp->src_hwaddr);
+        //MacStr2Mac(info->mac, arp->src_hwaddr); TODO:
 
         memcpy(arp->dst_hwaddr, tmp_arp.src_hwaddr, sizeof(arp->dst_hwaddr));
         memcpy(arp->dst_ipaddr, tmp_arp.dst_ipaddr, sizeof(arp->dst_ipaddr));
@@ -126,16 +138,14 @@ namespace netstack
                 std::make_shared<PacketBuffer>();
             Arp* arp = arp_pkt->AllocateObject<Arp>();
 
-            uint8_t src_mac_arr[6];
-            NetInfo* src_ip_info = NetInit::GetInstance()->GetNetworkInfo("", Ip2Str(in_src_ip));
-            IpStr2Ip(src_ip_info->mac, src_mac_arr);
-            MakeRequstArp(arp, in_src_ip, src_mac_arr, in_dst_ip);    // 构建一个arp请求包
+            NetInfo* src_ip_info = NetInit::GetInstance()->GetNetworkInfo(*(uint32_t*)(in_src_ip));
+            MakeRequstArp(arp, in_src_ip, src_ip_info->mac, in_dst_ip);    // 构建一个arp请求包
             
             // 创建一个指针,接收网卡包的线程用来设置
             std::shared_ptr<PacketBuffer>* ptr = new std::shared_ptr<PacketBuffer>;
-            NetifPcap* ifpcap = NetInit::GetInstance()->GetNetifPcap();
+            NetifPcap* ifpcap = NetInit::GetInstance()->GetMsgWorker();
             ifpcap->SetExpectedArpReply(*(uint32_t*)in_dst_ip, ptr);
-            EtherPush(arp_pkt, ETHER_TYPE_ARP); // 发送给网卡
+            EtherPush(arp_pkt, TYPE_ARP); // 发送给网卡
 
             std::time_t start = std::time(nullptr);
             bool timeout = false;
@@ -185,12 +195,13 @@ namespace netstack
     void ArpPop(std::shared_ptr<PacketBuffer> pkt)
     {
         Arp* arp = pkt->GetObjectPtr<Arp>(sizeof(EtherHdr));
+        ArpNetwork2Host(arp);
         if (arp->op_code == ARP_REQUEST)    // arp请求包
         {
             if (MakeReplyArp(arp))
             {
                 // 将arp响应包发送出去
-                EtherPush(pkt, ETHER_TYPE_ARP);
+                EtherPush(pkt, TYPE_ARP);
                 return;
             }
 
