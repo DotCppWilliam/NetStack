@@ -47,6 +47,10 @@ namespace netstack
         NetErr_t Out(IpAddr& addr, std::shared_ptr<PacketBuffer> pkt);
         NetInfo* GetNetInfo()
         { return netinfo_; }
+
+        // 判断当前接口是否指向的默认网关
+        bool IsDefaultGetaway()
+        { return netinfo_->is_default_gateway_; }
         
         NetErr_t PushPacket(std::shared_ptr<PacketBuffer> pkt, bool is_recv_queue = true, bool wait = false);
         NetErr_t PopPacket(std::shared_ptr<PacketBuffer> pkt, bool is_recv_queue = true, bool wait = false);

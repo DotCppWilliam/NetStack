@@ -20,6 +20,7 @@
 #include "net_type.h"
 #include "packet_buffer.h"
 #include <cstdint>
+#include <map>
 #include <memory>
 
 
@@ -53,15 +54,21 @@ namespace netstack
         DSCP_VOICE_ADMIT = 0x101100 // 容量许可的流量
     };
 
-
+    // 分片标志(一共3位)
+    enum FragmentFlag
+    {
+        FRAG_NO_SHARD           = 2,    // 禁止分片 (010)
+        FRAG_MORE_FRAGMENT      = 1,    // 允许分片,还有更多分片 (001)
+        FRAG_NO_MORE_FRAGMENT   = 0     // 允许分片,没有更多分片 (000)
+    };
 
     #pragma pack(1)
     struct IPV4_Hdr
     {
         union {
             uint8_t     version             : 4;    // 版本
-            uint8_t     header_length       : 4;    // 头部长度(表示头部可以有多少个32位字[最多15个])
-            uint8_t version_length;
+            uint8_t     header_length       : 4;    // 头部长度(表示头部可以有多少个 (4) 字节[最多15个])
+            uint8_t     version_length;
         };
 
         union {
@@ -74,19 +81,19 @@ namespace netstack
             //          DS5、4、3 表示类型; DS2、1表示丢弃概率
             // 前三个表示流量类别(数值越大处理优先级越高), 后三个表示丢弃优先级(数值越大丢弃优先级越高)
             uint8_t     ecn                 : 2;    // 显式拥塞通知
-            uint8_t service;
+            uint8_t     service;
         };
         
-        uint16_t    total_length;               // 总长度(数据长度,不包括头部)
+        uint16_t    total_length;               // 总长度(数据长度,包括头部***)
         uint16_t    identification;             // 标识
 
         union {
-            // 标志位( 第一位保留位, 第二位[DF禁止分片: 0:允许分片 1:禁止分片], 第三位[MF更多分片, 0: 最后一个分片 1:后面还有分片])
+            // 标志位( 第一位保留位, 第二位[DF禁止分片: 0:允许分片 1:禁止分片], 
+            // 第三位[MF更多分片, 0: 最后一个分片 1:后面还有分片])
             uint8_t     flags               : 3;    
-            uint16_t    fragment_offset     : 13;   // 分片偏移
-
-            uint16_t flags_fragment;
-        };
+            uint16_t    fragment_offset     : 13;   // 分片偏移, 单位(8字节)
+            uint16_t    flags_fragment;
+        } ;
 
         uint8_t     ttl;                        // 生存时间
         uint8_t     protocol;                   // 协议
@@ -94,13 +101,27 @@ namespace netstack
     
         uint32_t    src_ipaddr;                 // 源ip地址
         uint32_t    dst_ipaddr;                 // 目标ip地址
-    // 从这往上是20字节
-
-        void*       options = nullptr;          // 选项, 可变长度,最多320位即40字节
-        void*       data = nullptr;             // 数据, 可变长度,最多524120位即65515字节
     };
     #pragma pack()
 
+    #pragma pack(1)
+    struct IPV4_ExtendHdr
+    {
+        void* options;  // 选项
+        void* data;     // 数据
+    };
+    #pragma pack()
+
+
+
+    #pragma pack(1)
+    struct MsgReassembly    // 报文重组
+    {
+        uint32_t recv_size; // 已收到的分片大小(只累加其中的数据大小)
+        // key: 分片偏移,   value: 接收到的分片
+        std::map<uint16_t, std::shared_ptr<PacketBuffer>> fragments;
+    };
+    #pragma pack()
 
     void IPv4Push(std::shared_ptr<PacketBuffer> pkt, uint8_t* src_ip, uint8_t* dst_ip, PROTO_TYPE type);
     void IPv4Pop(std::shared_ptr<PacketBuffer> pkt);

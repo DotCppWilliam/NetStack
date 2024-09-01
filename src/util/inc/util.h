@@ -1,12 +1,23 @@
 #pragma once
 
-#include <cstdint>
 #include <cstddef>
+#include <ios>
+#include <sstream>
 
 namespace netstack 
 {
-    uint16_t Checksum16(uint32_t offset, void* buf, uint16_t len, uint32_t prev_sum, 
-        int complement);
 
     void DumpHex(const unsigned char* data, size_t size);
+
+    uint16_t GetRandomNum();
+
+    template <typename T>
+    std::string Num2HexStr(T num)
+    {
+        size_t byte_size = sizeof(T);
+        char* num_ptr = (char*)&num;
+        std::stringstream ssm;
+        ssm << std::uppercase << std::hex << num;
+        return std::string("0x") + ssm.str();
+    }
 }

@@ -1,36 +1,34 @@
 #include "ipv4.h"
 #include "ether.h"
-#include "icmp.h"
-#include "ipaddr.h"
 #include "net.h"
+#include "net_interface.h"
 #include "net_type.h"
 #include "packet_buffer.h"
+#include "util.h"
+
 #include <arpa/inet.h>
 #include <memory>
 
 
+#define IPV4_DATA_MAX_SIZE  (1480)      // ipv4数据载荷最大支持1480字节: MTU(1500) - ipv4头部(20字节)
+
 namespace netstack 
 {
+    extern std::list<NetInterface*> kNetifLists;
+
     static uint16_t kDataIdentification = 0;    // 数据包的标识
     static uint16_t kDefaultTTL = 64;           // 默认TTL为64(linux默认为这个值)
 
-    /*
-        计算方法： 校验和设置为0,首部所有字段反码求和然后结果再次反码然后存入到首部校验和里面.  
-        判断方法: 求反码求和再取反码,如果结果为0则正确,否则丢弃
-    */
+    // key: 标识,   value: 收到的报文
+    static std::map<uint16_t, MsgReassembly> kMsgReassemblyMap; // 接收重组分片的map
 
-    /*
-        问题: 为什么使用反码计算校验和?
-            为什么每个路由器都要重新计算首部校验和?
 
-        回答:
-            问题1: 容错性好, 反码对于传输过程中比特翻转能够较好的检测出来.
-            处理溢出简单，如果有溢出只需将溢出的部分加回到结果中,适合在硬件中实现
-
-            问题2: 当IP数据报经过路由器,会更新TTL字段,还有一些其他字段,所以首部校验和必须更新
-            错误检查
-    */
-
+    /**
+     * @brief 计算ipv4的校验和
+     * 
+     * @param hdr 
+     * @return uint16_t 
+     */
     uint16_t CheckSum(IPV4_Hdr* hdr)
     {
         uint32_t sum = 0;
@@ -58,7 +56,11 @@ namespace netstack
         hdr->dst_ipaddr = htonl(hdr->dst_ipaddr);
     }
 
-
+    /**
+     * @brief 将ipv4头部转换成网络字节序
+     * 
+     * @param hdr 
+     */
     void Ipv4Network2Host(IPV4_Hdr* hdr)
     {
         hdr->total_length = ntohl(hdr->total_length);
@@ -68,40 +70,93 @@ namespace netstack
         hdr->dst_ipaddr = ntohl(hdr->dst_ipaddr);
     }
 
+    /**
+     * @brief 数据报分片
+     * 
+     * @param pkt 
+     */
+    void Ipv4Fragment(std::shared_ptr<PacketBuffer> pkt, IPV4_Hdr hdr)
+    {
+        size_t data_size = pkt->TotalSize();
+        size_t chunk_cnt = data_size / IPV4_DATA_MAX_SIZE;
+        chunk_cnt += (data_size % IPV4_DATA_MAX_SIZE) != 0 ? 1 : 0;
+        size_t index = 0;
+
+
+        
+        size_t chunk_size;
+        for (size_t i = 0; i < chunk_cnt; i++)
+        {
+            chunk_size = data_size < IPV4_DATA_MAX_SIZE ? data_size : IPV4_DATA_MAX_SIZE;
+            data_size -= chunk_size;
+            std::shared_ptr<PacketBuffer> chunk_pkt =
+                std::make_shared<PacketBuffer>(chunk_size);
+            
+            pkt->Read(chunk_pkt->GetObjectPtr(), chunk_size);
+            pkt->Seek(chunk_size);
+
+            hdr.flags = FRAG_MORE_FRAGMENT;     // 允许分片,还有更多分片
+            hdr.fragment_offset = (i * IPV4_DATA_MAX_SIZE);
+            hdr.total_length = chunk_size + 20; // 总长度=数据长度+头部大小
+            hdr.head_checksum = CheckSum(&hdr);
+            
+            pkt->AddHeader(sizeof(IPV4_Hdr), (const unsigned char*)&hdr);
+            Ipv4Host2Network(&hdr);
+
+            EtherPush(chunk_pkt, TYPE_IPV4);    
+        }
+        pkt.reset();
+    }
+
+
+    /**
+     * @brief 提供给上层传输层使用,比如UDP、TCP、ICMP.
+     *        给上层数据增加ipv4头,如果数据包比较大则进行分片
+     * 
+     * @param pkt 上层的数据包
+     * @param src_ip 源ip地址,可以为空表示任意源地址
+     * @param dst_ip 目标地址
+     * @param type 上层使用的是什么协议
+     */
     void IPv4Push(std::shared_ptr<PacketBuffer> pkt, uint8_t* src_ip, uint8_t* dst_ip, PROTO_TYPE type)
     {
+    // 设置ipv4头
         IPV4_Hdr hdr;
-        hdr.version = 4;    
-        hdr.header_length = 5;  // 没有选项,默认头部为20字节
-        hdr.ds = DSCP_CS0;      // 尽力而为
+        hdr.version = 4;
+        hdr.header_length = 5;
+        hdr.ds = DSCP_CS0;
         hdr.ecn = 0;
-        
-        size_t data_size = pkt->TotalSize();
-        if (data_size > 1480)   // 需要分片
-        {
-            // TODO: ip分组
-        }
-        hdr.total_length = data_size;
-        hdr.identification = kDataIdentification++;
-        hdr.flags = 4;  // 1 0 0: 禁止分片、没有更多分片、保留位为0
-        hdr.fragment_offset = 0;
+        hdr.identification = GetRandomNum();
         hdr.ttl = kDefaultTTL;
         hdr.protocol = type;
-        hdr.head_checksum = 0;
-        hdr.src_ipaddr = *(uint32_t*)src_ip;
         hdr.dst_ipaddr = *(uint32_t*)dst_ip;
-        Ipv4Host2Network(&hdr); // 将头部转换成网络字节序
 
-    // 计算头部校验和
-        hdr.head_checksum = CheckSum(&hdr);
-        hdr.head_checksum = htons(hdr.head_checksum);
+        if (src_ip == nullptr)
+        {
+            auto it = std::find_if(kNetifLists.begin(), kNetifLists.end(),
+            [](NetInterface* iface){
+                return iface->IsDefaultGetaway();
+            });
+            hdr.src_ipaddr = *(uint32_t*)(*it)->GetNetInfo()->ip;
+        }
+        else 
+            hdr.src_ipaddr = *(uint32_t*)src_ip;
         
-        IPV4_Hdr* hdr_ptr = pkt->AllocateObject<IPV4_Hdr>();
-        *hdr_ptr = hdr;
+        // 进行分片
+        if (pkt->TotalSize() > IPV4_DATA_MAX_SIZE)  
+        {
+            Ipv4Fragment(pkt, hdr);
+            return;
+        }
+        
+        // 不分片
+        hdr.total_length = pkt->DataSize() + 20;
+        hdr.fragment_offset = 0;
+        hdr.flags = FRAG_NO_SHARD;
+        hdr.head_checksum = CheckSum(&hdr);
 
-        // TODO: 计算出应该发往哪里
-
-        EtherPush(pkt, TYPE_IPV4);  // 交给以太网模块去发送
+        pkt->AddHeader(sizeof(hdr), (const unsigned char*)&hdr);
+        EtherPush(pkt, TYPE_IPV4);
     }
 
 
@@ -109,51 +164,8 @@ namespace netstack
     void IPv4Pop(std::shared_ptr<PacketBuffer> pkt)
     {
         IPV4_Hdr* hdr = pkt->GetObjectPtr<IPV4_Hdr>();
-        if (CheckSum(hdr) != 0) // 这个数据包有错误
-        {
-            pkt.reset();
-            return;
-        }
+        
 
-        Ipv4Host2Network(hdr);
-    // 检查是否是 xxx.xxx.xxx.255 或者255.255.255.255这样的广播地址
-    // 如果是广播地址要进行处理
-        std::string ip_str = Ip2Str((uint8_t*)&hdr->dst_ipaddr);
-        std::string last_str = ip_str.substr(ip_str.size() - 3, ip_str.size());
-        NetInfo* info = nullptr;
-        if (last_str != "255")
-        {
-        // 然后再进行匹对是否目的地址是自己
-            info = NetInit::GetInstance()->GetNetworkInfo(hdr->dst_ipaddr);
-            if (info == nullptr)    // 不是发给当前主机的ip数据包则丢弃掉
-            {
-                pkt.reset();
-                return;
-            }
-        }
-        else 
-        {
-            // TODO: 进行掩码匹配判断是否是一个子网的
 
-        }
-
-        uint8_t protocol = hdr->protocol;
-        pkt->RemoveHeader(sizeof(IPV4_Hdr));
-
-        switch (protocol) 
-        {
-            case TYPE_TCP:
-
-                break;
-            case TYPE_UDP:
-
-                break;
-            case TYPE_ICMP:
-                IcmpPop(pkt);   // 交给icmp模块去处理
-                break;
-            default:
-                pkt.reset();    // 其他协议的不处理
-                break;
-        }
     }
 }

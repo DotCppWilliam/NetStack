@@ -108,12 +108,12 @@ namespace netstack
 
 
     ////////////////////////////////////// PacketBuffer
-    PacketBuffer::PacketBuffer()
-        : total_size_(0),
-        data_size_(0),
+    PacketBuffer::PacketBuffer(size_t size)
+        : total_size_(size),
+        data_size_(size),
         curr_block_(nullptr)
     {
-
+        CreateBlock(size);
     }
 
     PacketBuffer::~PacketBuffer()
@@ -236,21 +236,37 @@ namespace netstack
 
     int PacketBuffer::Read(unsigned char* dest, size_t size, PacketBlock* block)
     {
-        if (dest == nullptr || size == 0 || data_size_ < size || blocks_.empty())
+        if (dest == nullptr || size == 0 || index_ + size > total_size_)
             return -1;
-
-        // 如果没有从哪块开始读,则默认从数据包头部开始读
-        if (block == nullptr)
-            block = *blocks_.begin();	
-
-        int index = 0;
-        while (size)
+        
+        int start = 0;
+        PacketBlock* curr_block = *blocks_.begin();
+        if (index_ != 0)
         {
-            size_t curr_bkt_size = size > block->DataSize() ? block->DataSize() : size;
-            block->GetData(curr_bkt_size, dest + index);
-            index += curr_bkt_size;
-            size -= curr_bkt_size;
-            block = block->next_;
+            int remaing_size = index_;
+            while (remaing_size && curr_block != nullptr)
+            {
+                if (curr_block->DataSize() < remaing_size)
+                {
+                    remaing_size -= curr_block->DataSize();
+                }
+                else if (curr_block->DataSize() >= remaing_size)
+                {
+                    start += remaing_size;
+                    remaing_size = 0;
+                }
+
+                curr_block = curr_block->next_;
+            }
+        }
+
+        int curr_copy_size = curr_block->DataSize() - start;
+        int index = 0;
+        while (size && curr_block)
+        {
+            memcpy(dest + index, (char*)curr_block->GetDataPtr() + start, curr_copy_size);
+            size -= curr_copy_size;
+            curr_block = curr_block->next_;
         }
         
         return 0;
@@ -258,6 +274,19 @@ namespace netstack
 
     int PacketBuffer::Seek(int offset)
     {
+        if (offset < 0)
+        {
+            int positive = 0 - offset;
+            if (index_ < positive)
+                return -1;
+            index_ -= positive;
+            return 0;
+        }
+
+        if (index_ + offset > total_size_)
+            return -1;
+
+        index_ += offset;
         return 0;
     }
 

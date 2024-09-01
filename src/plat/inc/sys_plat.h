@@ -78,6 +78,7 @@ namespace netstack
         std::string name;   // 子网掩码
         NetIfType type;     // 网卡类型: 是普通网卡还是回环网卡
         pcap_t* device = nullptr;   // 操作网卡的指针
+        bool is_default_gateway_;   // 是否是默认网关
     };
     #pragma pack()
 

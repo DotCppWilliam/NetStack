@@ -1,17 +1,12 @@
 #include "util.h"
 
+#include <cstdint>
 #include <cstdio>
+#include <limits>
+#include <random>
 
 namespace netstack 
 {
-    uint16_t Checksum16(uint32_t offset, void* buf, uint16_t len, uint32_t prev_sum, 
-        int complement)
-    {
-
-
-        return 0;
-    }
-
 
     void DumpHex(const unsigned char* data, size_t size)
     {
@@ -38,5 +33,15 @@ namespace netstack
             fflush(stdout);
         }
         printf("\n");
+    }
+
+
+    uint16_t GetRandomNum()
+    {
+        std::random_device device;
+        std::mt19937 generator(device());
+        uint16_t max_num = std::numeric_limits<uint16_t>::max();
+        std::uniform_int_distribution<uint16_t> distribution(0, max_num);
+        return distribution(generator);
     }
 }

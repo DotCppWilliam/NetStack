@@ -73,7 +73,7 @@ namespace netstack
     class PacketBuffer : NonCopyable
     {
     public:
-        PacketBuffer();
+        PacketBuffer(size_t size = 0);
         ~PacketBuffer();
     public:
         int AddHeader(size_t, const unsigned char*);
@@ -132,6 +132,7 @@ namespace netstack
         PacketBlock* curr_block_;
         size_t total_size_;		// 数据包总大小
         size_t data_size_;		// 数据大小
+        size_t index_ = 0;
     };
 
 }
