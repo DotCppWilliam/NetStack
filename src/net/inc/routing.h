@@ -50,5 +50,7 @@ namespace netstack
     #pragma pack()
 
 
+    void RoutingMapInit();
+
     extern std::map<uint32_t, Routing> kRoutingMap;    // 路由表
 }

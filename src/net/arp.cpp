@@ -1,6 +1,6 @@
 #include "arp.h"
 #include "ether.h"
-#include "net.h"
+#include "net_init.h"
 #include "net_pcap.h"
 #include "packet_buffer.h"
 #include "sys_plat.h"
@@ -125,62 +125,7 @@ namespace netstack
      */
     bool ArpPush(uint8_t in_src_ip[4], uint8_t in_dst_ip[4], uint8_t out_dst_mac[6])
     {
-        std::unordered_map<uint32_t, ArpCache>::iterator ret = kArpCaches.end();
-        {
-            // 获取一把读锁
-            std::shared_lock<std::shared_mutex> read_mutex(kRwMutex);
-            ret = kArpCaches.find(*(uint32_t*)in_dst_ip);
-        }
-        
-        if (ret == kArpCaches.end())    // 没有找到
-        {
-            std::shared_ptr<PacketBuffer> arp_pkt = 
-                std::make_shared<PacketBuffer>();
-            Arp* arp = arp_pkt->AllocateObject<Arp>();
-
-            NetInfo* src_ip_info = NetInit::GetInstance()->GetNetworkInfo(*(uint32_t*)(in_src_ip));
-            MakeRequstArp(arp, in_src_ip, src_ip_info->mac, in_dst_ip);    // 构建一个arp请求包
-            
-            // 创建一个指针,接收网卡包的线程用来设置
-            std::shared_ptr<PacketBuffer>* ptr = new std::shared_ptr<PacketBuffer>;
-            NetifPcap* ifpcap = NetInit::GetInstance()->GetMsgWorker();
-            ifpcap->SetExpectedArpReply(*(uint32_t*)in_dst_ip, ptr);
-            EtherPush(arp_pkt, TYPE_ARP); // 发送给网卡
-
-            std::time_t start = std::time(nullptr);
-            bool timeout = false;
-            while (!ptr->get())
-            {
-                std::time_t curr = std::time(nullptr);
-                double elasped_seconds = std::difftime(curr, start);
-                if (elasped_seconds >= 6.0) // 如果超过6秒没有获取到Arp响应包,那就是局域网没有这个IP地址
-                {
-                    timeout = true;
-                    break;
-                }
-            }
-
-            // 时间超时没有获取arp响应包
-            if (timeout && ptr->get() == nullptr)
-            {
-                delete ptr;
-                return false;
-            }
-
-            if (ptr->get())
-            {
-                // 获取一把写锁
-                std::shared_lock<std::shared_mutex> write_lock(kRwMutex);
-                Arp* arp_ptr = (*ptr)->GetObjectPtr<Arp>(sizeof(EtherHdr));
-                ArpCache cache((uint64_t)arp_ptr->src_hwaddr);
-                kArpCaches.insert( { *(uint32_t*)arp_ptr->src_ipaddr, cache });
-
-                memcpy(out_dst_mac, arp_ptr->src_hwaddr, sizeof(arp_ptr->src_hwaddr));
-                ptr->reset();
-                delete ptr;
-                return true;
-            }
-        }
+        // TODO: 重构代码
 
         return false;
     }

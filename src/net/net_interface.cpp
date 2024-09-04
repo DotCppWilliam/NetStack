@@ -1,228 +1,137 @@
 #include "net_interface.h"
-#include "loop.h"
-#include "net.h"
-#include "packet_buffer.h"
+#include "concurrent_queue.h"
+#include "ether.h"
+#include "net_init.h"
 #include "net_err.h"
+#include "packet_buffer.h"
+#include "pcap.h"
 #include "sys_plat.h"
 #include <memory>
 
 namespace netstack 
 {   
-    extern std::list<NetInterface*> kNetifLists;
-    /**
-     * @brief 初始化网卡接口
-     * 
-     * @param devices 
-     */
-    void InitNetInterfaces(std::vector<NetInfo*>* devices)
+    NetInterface* NetInterface::kLoopNetinterface = nullptr;
+
+    NetInterface* GetLoopNetinterface()
+    { return NetInterface::kLoopNetinterface; }
+
+
+
+    NetInterface::NetInterface(NetInfo* netinfo, int queue_max_threshold)
+        : netinfo_(netinfo), queue_max_threshold_(queue_max_threshold),
+        recv_queue_(queue_max_threshold), send_queue_(queue_max_threshold)
     {
-        size_t size = devices->size();
-        NetInterface* netif = nullptr;
-        for (size_t i = 0; i < size; i++)
-        {
-            if ((*devices)[i]->type == NETIF_TYPE_LOOP)
-                netif = new NetIfLoop((*devices)[i]);
-            else 
-            {
-                netif = new NetInterface(nullptr, 
-                    (*devices)[i]->name.c_str(), (*devices)[i]);
-            
-            }
-            kNetifLists.push_back(netif);
-        }
-    }
-
-
-
-    NetInterface* NetInterface::default_netif_;
-
-    // 默认发送数据包的网卡
-    NetInterface* kDefaultNetIf = nullptr;
-
-    NetInterface::NetInterface(void* arg, const char* device_name, NetInfo* netinfo, int queue_max_threshold)
-        : state_(NETIF_CLOSED),
-        mtu_(0),
-        queue_max_threshold_(0),
-        ops_data_(arg),
-        name_(device_name), netinfo_(netinfo),
-        recv_queue_(queue_max_threshold),
-        send_queue_(queue_max_threshold)
-    {
-        default_netif_ = this;  // 默认指向当前网卡
+        netif_fd_ = pcap_fileno(netinfo->device);
+        if (netinfo->is_default_gateway_)
+            kLoopNetinterface = this;
     }
 
     NetInterface::~NetInterface()
     {
-        
+
     }
 
-    NetErr_t NetInterface::Open(void* arg)
+    NetErr_t NetInterface::PushPacket(SharedPkt pkt, bool is_recv_queue, bool wait)
     {
-        
-
-        return NET_ERR_OK;
-    }
-
-    NetErr_t NetInterface::Close()
-    {
-        if (state_ == NETIF_ACTIVE)
-        {
-            // 日志输出: TODO: 激活状态下不能关闭网卡
-            return NET_ERR_STATE;
-        }
-
-        // TODO: 关闭操作
-
-        state_ = NETIF_CLOSED;
-        kNetifLists.remove(this);
-        return NET_ERR_OK;
-    }
-
-    NetErr_t NetInterface::Send()
-    {
-
-        return NET_ERR_OK;
-    }
-
-
-    void NetInterface::SetAddr(IpAddr& ip, IpAddr& netmask, IpAddr& gateway)
-    {
-        ipaddr_ = ip;
-        netmask_ = netmask;
-        gateway_ = gateway;
-    }
-
-
-    void NetInterface::SetMacAddr(std::string& mac_addr)
-    {
-        mac_addr_ = mac_addr;
-    }
-
-
-    NetErr_t NetInterface::SetActiveState()
-    {
-        if (state_ != NETIF_OPENED)
-        {
-            // 日志: 网络没有打开
-            return NET_ERR_STATE;
-        }
-        state_ = NETIF_ACTIVE;
-        return NET_ERR_OK;
-    }
-
-
-    NetErr_t NetInterface::SetDeActiveState()
-    {
-        if (state_ != NETIF_ACTIVE)
-        {
-            // 日志: TODO: 没有激活
-            return NET_ERR_STATE;
-        }
-        state_ = NETIF_OPENED;
-        recv_queue_.Clear();    // TODO: 并发队列的Clear还没有做
-        send_queue_.Clear();
-
-        return NET_ERR_OK;
-    }
-
-
-    void NetInterface::DisplayInfo()
-    {
-        std::string state;
-        std::string ip, netmask;
-
-        IpAddr2Str(ipaddr_, ip);
-        IpAddr2Str(netmask_, netmask);
-
-        switch (static_cast<int>(state_)) 
-        {
-            case NETIF_ACTIVE:
-                state = "RUNNING";
-                break;
-            case NETIF_DEACTIVE:
-            case NETIF_OPENED:
-                state = "OPEND";
-                break;
-            case NETIF_CLOSED:
-                state = "CLOSED";
-                break;
-        }
-
-        printf("Network card information: \n");
-        printf("%s: flags<%s> mtu %llu\n", name_.c_str(), state.c_str(), mtu_);
-        
-        printf("\t\tinet: %s  netmask:  %s\n", ip.c_str(), netmask.c_str());
-        printf("ether: %s  txqueuelen: %d (%s)\n\n", mac_addr_.c_str(), queue_max_threshold_, 
-            type_ == NETIF_TYPE_LOOP ? "Local Loopback" : "Ehternet");
-    }
-
-
-    void NetInterface::SetDefaultNetif(NetInterface* netif)
-    {
-        default_netif_ = netif;
-    }
-
-
-
-    NetErr_t NetInterface::PushPacket(std::shared_ptr<PacketBuffer> pkt, bool is_recv_queue, bool wait)
-    {
-        ConcurrentQueue<std::shared_ptr<PacketBuffer>>* queue;
+        ConcurrentQueue<std::shared_ptr<PacketBuffer>>* conqueue;
         if (is_recv_queue)
-            queue = &recv_queue_;
-        else 
-            queue = &send_queue_;
-        
-        if (wait)
+            conqueue = &recv_queue_;
+        else
+            conqueue = &send_queue_;
+
+        if (pkt->DataSize() == 0)
+            return NET_ERR_PARAM;
+
+        while (true)
         {
-            while (!queue->TryEmplace(pkt));
-        }
-        else 
-        {
-            bool ret = queue->TryEmplace(pkt);
-            if (!ret)
+            bool ret = conqueue->TryPush<std::shared_ptr<PacketBuffer>>(pkt);
+            if (ret == false && wait)
+                continue;
+            else
                 return NET_ERR_FULL;
         }
 
-        NetInit::GetInstance()->GetExchangeMsg()->SendMsg(this, MSG_TYPE_RECV_PKT);
         return NET_ERR_OK;
     }
-
-
-    NetErr_t NetInterface::PopPacket(std::shared_ptr<PacketBuffer>, bool is_recv_queue, bool wait)
+    
+    NetErr_t NetInterface::PopPacket(SharedPkt& pkt, bool is_recv_queue, bool wait)
     {
-        std::shared_ptr<PacketBuffer> pkt;
-        ConcurrentQueue<std::shared_ptr<PacketBuffer>>* queue;
+        ConcurrentQueue<std::shared_ptr<PacketBuffer>>* conqueue;
         if (is_recv_queue)
-            queue = &recv_queue_;
-        else 
-            queue = &send_queue_;
-        
-        if (wait)
+            conqueue = &recv_queue_;
+        else
+            conqueue = &send_queue_;
+
+        if (conqueue->Empty())
+            return NET_ERR_EMPTY;
+
+        while (true)
         {
-            while (!queue->TryPop(pkt));
-        }
-        else 
-        {
-            bool ret = queue->TryPop(pkt);
-            if (!ret)
-                return NET_ERR_EMPTY;    
+            bool ret = conqueue->TryPop(pkt);
+            if (ret == false && wait)
+                continue;
+            else
+                return NET_ERR_EMPTY;
         }
 
-        // exmsg 通知消息 TODO:
         return NET_ERR_OK;
     }
 
-
-
-
-
-
-
-
-    NetErr_t NetInterface::Out(IpAddr& addr, std::shared_ptr<PacketBuffer> pkt)
+    /**
+     * @brief 从网卡读取数据放入到接收队列中
+     * 
+     */
+    bool NetInterface::NetRx()
     {
-        NetErr_t ret = PushPacket(pkt, false);
-        Send(); // 网卡发送数据
-        return ret;
+        pcap_pkthdr* hdr;
+        const u_char* data;
+        pcap_next_ex(netinfo_->device, &hdr, &data);
+
+        std::shared_ptr<PacketBuffer> pkt = std::make_shared<PacketBuffer>(hdr->len);
+        pkt->Write(data, hdr->len);
+
+        if (recv_queue_.TryPush<std::shared_ptr<PacketBuffer>>(pkt) == false)
+        {
+            pkt.reset();
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * @brief 从发送队列中读取数据包通过网卡发送出去
+     * 
+     */
+    bool NetInterface::NetTx()
+    {
+        if (send_queue_.Empty())    // 没有数据包可发送
+            return false;
+
+        std::shared_ptr<PacketBuffer> pkt;
+        send_queue_.Pop(pkt);
+
+        unsigned char* data = new unsigned char[pkt->DataSize()];
+        pkt->Read(data, pkt->DataSize());
+
+        // 这种情况很小,除非网卡掉了或者网卡打开失败
+        if (pcap_inject(netinfo_->device, data, pkt->DataSize()) == -1)
+        {
+            fprintf(stderr, "pcap_inject failed: %s\n", pcap_geterr(netinfo_->device));
+            delete [] data;
+            pkt.reset();
+            return false;
+        }
+
+        return true;
+    }
+
+
+    void HandleRecvPktCallback(NetInterface* iface)
+    {
+        SharedPkt pkt;
+        bool ret = iface->recv_queue_.TryPop(pkt);
+        if (ret == false)
+            return;
+        EtherPop(pkt);  // 交给以太网来处理,然后逐层向上传递
     }
 }

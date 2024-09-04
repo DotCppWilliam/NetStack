@@ -29,7 +29,7 @@
         线程数 = CPU核心数 * 2(IO密集型)
 */
 
-const int kTaskMaxThreshold = 512;
+const int kTaskMaxThreshold = 1024;
 const int kThreadMaxThreshold = 1024;
 const int kThreadMaxIdleTime = 60;
 
@@ -41,6 +41,8 @@ namespace netstack
         MODE_FIXED,     // 固定线程数量模式
         MODE_CACHED     // 动态线程数量模式
     };
+
+    
     // 线程
     class Thread
     {
@@ -55,6 +57,8 @@ namespace netstack
         static int generate_id_;
         int thread_id_;
     };
+
+
     // 线程池
     class ThreadPool : private NonCopyable
     {
@@ -145,7 +149,7 @@ namespace netstack
         * 
         * @param initThreadCnt 
         */
-        void Start(int initThreadCnt = std::thread::hardware_concurrency());
+        void Start(int initThreadCnt = std::thread::hardware_concurrency() + 10);
     private:    
         void ThreadFunc(int thread_id); // 线程执行函数
         template <typename RType>

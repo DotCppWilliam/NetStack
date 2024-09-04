@@ -1,24 +1,25 @@
 #include "ipv4.h"
 #include "ether.h"
-#include "net.h"
+#include "net_init.h"
 #include "net_interface.h"
 #include "net_type.h"
 #include "packet_buffer.h"
+#include "sys_plat.h"
 #include "util.h"
 
 #include <arpa/inet.h>
 #include <memory>
+#include <mutex>
 
 
 #define IPV4_DATA_MAX_SIZE  (1480)      // ipv4数据载荷最大支持1480字节: MTU(1500) - ipv4头部(20字节)
 
 namespace netstack 
 {
-    extern std::list<NetInterface*> kNetifLists;
-
     static uint16_t kDataIdentification = 0;    // 数据包的标识
     static uint16_t kDefaultTTL = 64;           // 默认TTL为64(linux默认为这个值)
 
+    std::mutex kMsgReassemblyMutex;
     // key: 标识,   value: 收到的报文
     static std::map<uint16_t, MsgReassembly> kMsgReassemblyMap; // 接收重组分片的map
 
@@ -132,13 +133,7 @@ namespace netstack
         hdr.dst_ipaddr = *(uint32_t*)dst_ip;
 
         if (src_ip == nullptr)
-        {
-            auto it = std::find_if(kNetifLists.begin(), kNetifLists.end(),
-            [](NetInterface* iface){
-                return iface->IsDefaultGetaway();
-            });
-            hdr.src_ipaddr = *(uint32_t*)(*it)->GetNetInfo()->ip;
-        }
+            hdr.src_ipaddr = *(uint32_t*)GetLoopNetinterface()->GetNetInfo()->ip;
         else 
             hdr.src_ipaddr = *(uint32_t*)src_ip;
         
@@ -160,12 +155,86 @@ namespace netstack
     }
 
 
+    /**
+     * @brief 处理分片重组的回调函数
+     *        当接收到所有的分片之后,向线程池提交该函数,用来处理
+     * 
+     * @param identification 
+     */
+    void HandleMsgReassemblyCallback(uint16_t identification)
+    {
+        
+
+        // TODO: 处理分片重组,然后交给上层处理
+    }
+
 
     void IPv4Pop(std::shared_ptr<PacketBuffer> pkt)
     {
         IPV4_Hdr* hdr = pkt->GetObjectPtr<IPV4_Hdr>();
-        
+        NetInfo* info = NetInit::GetInstance()->GetNetworkInfo(hdr->dst_ipaddr);
+        if (info == nullptr)
+        {
+        // 查看是否是子网广播或者广播地址,也就是最后是255的地址
+            uint8_t* dst_ip = (uint8_t*)&hdr->dst_ipaddr;
+            if (dst_ip[3] != 255)
+            {
+                pkt.reset();    // 不是子网广播或者广播地址也不是发给自己的则丢弃掉
+                return;
+            }
+        }
+
+        auto it = kMsgReassemblyMap.find(hdr->identification);
+        if (it != kMsgReassemblyMap.end())  // 是分片的
+        {
+            size_t recv_size = 0;
+            // 将该分片保存下来
+            {
+                std::unique_lock<std::mutex> lock(kMsgReassemblyMutex);
+                kMsgReassemblyMap[hdr->identification].recv_size += hdr->total_length - 20;
+                kMsgReassemblyMap[hdr->identification].fragments[hdr->fragment_offset] = pkt;
+                recv_size = kMsgReassemblyMap[hdr->identification].recv_size;
+            }
+            if (hdr->flags == FRAG_MORE_FRAGMENT)   // 还有更多分片,则退出还不能处理该数据报
+            {
+                return;
+            }
+            else    // 已经是最后一个分片了,计算是否全部接收完
+            {
+                size_t total_size = hdr->fragment_offset + hdr->total_length - 20;
+                if (total_size != recv_size)    // 还未全部接收完
+                    return;
+                else
+                {
+                    // TODO: 提交给线程池去分片重组
+                    // threadpool.SubmitTask(HandleMsgReassemblyCallback, hdr->identification);
+                    return;
+                }
+            }
+            return;
+        }
 
 
+    // 不是分片的,则直接交给上层处理
+        uint8_t protocol = hdr->protocol;
+        switch (protocol) 
+        {
+            case TYPE_ICMP:
+                // TODO: 交给ICMP处理
+                break;
+            case TYPE_IGMP:
+                // TODO: 交给IGMP处理
+                break;
+            case TYPE_TCP:
+                // TODO: 交给TCP处理
+                break;
+            case TYPE_UDP:
+                // TODO: 交给UDP处理
+                break;
+            default:
+                pkt.reset();    // 不支持该协议则直接丢弃
+                return;
+        }
+        return;
     }
 }

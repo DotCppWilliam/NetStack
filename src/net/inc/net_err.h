@@ -15,5 +15,6 @@ namespace netstack
         NET_ERR_FULL    =   -8,
         NET_ERR_EMPTY   =   -9,
         NET_ERR_IO      =   -10,
+        NET_ERR_BAD_ALLOC = -11,
     };
 }

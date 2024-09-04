@@ -1,7 +1,7 @@
 #include "ether.h"
 #include "arp.h"
 #include "ipv4.h"
-#include "net.h"
+#include "net_init.h"
 #include "net_interface.h"
 #include "sys_plat.h"
 
@@ -46,8 +46,7 @@ namespace netstack
         return true;
     }
 
-    // TODO: 暂时用不上
-    bool EtherPop(std::shared_ptr<PacketBuffer>& pkt)
+    bool EtherPop(std::shared_ptr<PacketBuffer> pkt)
     {
 
 
