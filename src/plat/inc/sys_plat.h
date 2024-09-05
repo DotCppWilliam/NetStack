@@ -137,7 +137,10 @@ namespace netstack
     class CustomThread
     {
     public:
-        CustomThread() {}
+        CustomThread() 
+        {
+            is_running_ = true;
+        }
         ~CustomThread() {}
 
         void Start();

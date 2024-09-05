@@ -15,21 +15,21 @@ namespace netstack
 
     AtExitManager::~AtExitManager()
     {
-        assert(!g_top_manager);
+        assert(g_top_manager);
         ProcessCallBackNow();
         g_top_manager = next_manager_;
     }
 
     void AtExitManager::RegisterCallBack(AtExitCallBackType func, void* parm)
     {
-        assert(!g_top_manager);
+        assert(g_top_manager);
         AutoLock lock(g_top_manager->lock_);
         g_top_manager->stack_.push( { func, parm });
     }
 
     void AtExitManager::ProcessCallBackNow()
     {
-        assert(!g_top_manager);
+        assert(g_top_manager);
 
         AutoLock lock(g_top_manager->lock_);
         while (!g_top_manager->stack_.empty())
@@ -37,7 +37,7 @@ namespace netstack
             // 获取一个任务
             CallBack task = g_top_manager->stack_.top();
             task.func(task.parm);
-            g_top_manager->stack_.top();
+            g_top_manager->stack_.pop();
         }
     }
 

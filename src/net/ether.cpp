@@ -1,17 +1,29 @@
 #include "ether.h"
 #include "arp.h"
 #include "ipv4.h"
+#include "net_err.h"
 #include "net_init.h"
 #include "net_interface.h"
+#include "packet_buffer.h"
 #include "sys_plat.h"
 
 #include <cstdint>
 #include <cstring>
+#include <memory>
 #include <unordered_map>
 
 namespace netstack 
 {
     std::unordered_map<uint32_t, NetInterface*> kNetInterfaces;
+
+    NetErr_t CheckEtherFrame(std::shared_ptr<PacketBuffer>& pkt)
+    {
+        if (pkt->DataSize() < sizeof(EtherHdr))
+            return NET_ERR_PARAM;
+
+        
+        return NET_ERR_OK;
+    }
 
     bool EtherPush(std::shared_ptr<PacketBuffer> pkt, PROTO_TYPE type)
     {
@@ -46,9 +58,16 @@ namespace netstack
         return true;
     }
 
+    /**
+     * @brief 传递给
+     * 
+     * @param pkt 
+     * @return true 
+     * @return false 
+     */
     bool EtherPop(std::shared_ptr<PacketBuffer> pkt)
     {
-
+        
 
         return true;
     }

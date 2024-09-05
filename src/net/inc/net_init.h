@@ -1,5 +1,6 @@
 #pragma once
 
+#include "at_exit.h"
 #include "event_loop.h"
 #include "net_err.h"
 #include "net_interface.h"
@@ -31,5 +32,6 @@ namespace netstack
         ThreadPool pool;                    // 线程池,用来处理接收、发送数据包的处理工作
         RecvEventLoop* event_loop_;         // 读取网卡数据包事件循环
         std::list<NetInterface*> netifs_;   // 网卡接口列表
+        AtExitManager exit_manager_;
     };
 }

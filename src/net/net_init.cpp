@@ -51,6 +51,7 @@ namespace netstack
         event_loop_ = new RecvEventLoop(&netifs_, pool);
         if (event_loop_ == nullptr)
             return NET_ERR_BAD_ALLOC;
+        event_loop_->Start();
 
     // 初始化定时器 TODO:
 

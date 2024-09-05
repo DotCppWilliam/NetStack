@@ -534,8 +534,6 @@ namespace netstack
     ////////////////////////////////////////////////// SysThread
     void CustomThread::Start()
     {   
-        if (is_running_)
-            return;
         thread_ = std::thread(&CustomThread::ThreadFunc, this);
         thread_.detach();
     }
@@ -549,7 +547,6 @@ namespace netstack
 
     void CustomThread::ThreadFunc()
     {
-        is_running_ = true;
         while (!exit_)
         {
             {

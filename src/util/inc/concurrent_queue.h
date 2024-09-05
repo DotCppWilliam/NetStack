@@ -21,8 +21,10 @@ namespace netstack
         {
             if (n > std::numeric_limits<std::size_t>::max() / sizeof(T))
                 throw std::bad_array_new_length();
+            
             T* ret;
-            if (!posix_memalign(reinterpret_cast<void**>(&ret), alignof(T), sizeof(T) * n))
+            ret = (T*)malloc(sizeof(T) * n);
+            if (ret == nullptr)
                 throw std::bad_alloc();
 
             return ret;
@@ -63,7 +65,8 @@ namespace netstack
         }
 
         std::atomic<size_t> turn_ = { 0 };
-        typename std::aligned_storage<sizeof(T), alignof(T)>::type storage_;
+        //typename std::aligned_storage<sizeof(T), alignof(T)>::type storage_;
+        T storage_;
     };
 
 
@@ -77,7 +80,7 @@ namespace netstack
             if (capacity < 1)
                 throw std::invalid_argument("capacity < 1");
 
-            slots_ = allocator_.Allocate(capacity + 1);
+            slots_ = allocator_.Allocate(capacity);
             if (reinterpret_cast<size_t>(slots_) % alignof(Slots<T>) != 0)
             {
                 allocator_.Deallocate(slots_, capacity + 1);

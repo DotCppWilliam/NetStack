@@ -30,13 +30,16 @@ namespace netstack
     ThreadPool::ThreadPool()
         : init_thread_cnt_(0),
         mode_(PoolMode::MODE_CACHED),   // 默认为动态模式
-        running_(false)
+        running_(false), task_queue_(std::thread::hardware_concurrency() + 20)
     {
     }
 
 
     ThreadPool::~ThreadPool()
-    { Exit(); }
+    { 
+        Exit(); 
+    
+    }
 
 
     void ThreadPool::Exit()

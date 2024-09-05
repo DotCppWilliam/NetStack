@@ -109,8 +109,8 @@ namespace netstack
 
     ////////////////////////////////////// PacketBuffer
     PacketBuffer::PacketBuffer(size_t size)
-        : total_size_(size),
-        data_size_(size),
+        : total_size_(0),
+        data_size_(0),
         curr_block_(nullptr)
     {
         CreateBlock(size);

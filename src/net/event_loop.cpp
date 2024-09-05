@@ -12,7 +12,7 @@ namespace netstack
         : epollfd_(-1), start_(false), 
         netiflists_(netiflists), pool_(pool)
     {
-        recv_loop_thread_.SetThreadFunc(&RecvEventLoop::ThreadFunc, this);
+        
     }
 
     RecvEventLoop::~RecvEventLoop()
@@ -41,6 +41,7 @@ namespace netstack
 
         start_ = true;
         recv_loop_thread_.Start();
+        recv_loop_thread_.SetThreadFunc(&RecvEventLoop::ThreadFunc, this);
         return true;
     }
 
