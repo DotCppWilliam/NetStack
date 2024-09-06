@@ -14,7 +14,6 @@
 #include <thread>
 #include <chrono>
 #include <type_traits>
-#include <vector>
 
 
 using net_time_t = struct timeval;
@@ -91,13 +90,6 @@ namespace netstack
 
         bool FindDevice(const char* ip, char* name_buf);
         bool ShowList();
-        NetInfo* GetNetworkPtr(std::string name = "", uint32_t ip = 0, NetIfType type = NETIF_TYPE_NONE);
-
-        bool IsOpened() const 
-        { return devices_.empty(); }
-
-        std::vector<NetInfo*>* GetDevices()
-        { return &devices_; }
 
         static NetErr_t SendData(pcap_t* netif, std::shared_ptr<PacketBuffer>& pkt);
         static NetErr_t RecvData(pcap_t* netif, std::shared_ptr<PacketBuffer>& pkt);
@@ -107,7 +99,6 @@ namespace netstack
     
     private:
         NetInfo* loop_device_ = nullptr;
-        std::vector<NetInfo*> devices_;
     };
 
 

@@ -104,7 +104,7 @@ namespace netstack
                 return nullptr;
             
             if (std::is_same<T, uint8_t>::value)
-                return reinterpret_cast<T*>(blocks_.front());
+                return reinterpret_cast<T*>(blocks_.front()->GetDataPtr());
 
             size_t type_size = sizeof(T);
             PacketBlock* head = blocks_.front();

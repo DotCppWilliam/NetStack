@@ -17,6 +17,7 @@
     |
     发送在前
  */
+#include "net_err.h"
 #include "net_type.h"
 #include "packet_buffer.h"
 #include <cstdint>
@@ -123,7 +124,6 @@ namespace netstack
     };
     #pragma pack()
 
-    void IPv4Push(std::shared_ptr<PacketBuffer> pkt, uint8_t* src_ip, uint8_t* dst_ip, PROTO_TYPE type);
-    void IPv4Pop(std::shared_ptr<PacketBuffer> pkt);
-
+    NetErr_t IPv4Push(std::shared_ptr<PacketBuffer> pkt, uint8_t* src_ip, uint8_t* dst_ip, PROTO_TYPE type);
+    NetErr_t IPv4Pop(std::shared_ptr<PacketBuffer> pkt);
 }

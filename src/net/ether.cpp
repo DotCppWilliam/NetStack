@@ -2,73 +2,126 @@
 #include "arp.h"
 #include "ipv4.h"
 #include "net_err.h"
-#include "net_init.h"
 #include "net_interface.h"
+#include "net_type.h"
 #include "packet_buffer.h"
-#include "sys_plat.h"
 
 #include <cstdint>
 #include <cstring>
 #include <memory>
-#include <unordered_map>
 
 namespace netstack 
 {
-    std::unordered_map<uint32_t, NetInterface*> kNetInterfaces;
+    extern std::map<uint32_t, NetInterface*> kNetifacesMap; // 定义在net_init.cpp中
 
+    /**
+     * @brief 检验是否是合法的以太网帧
+     * 
+     * @param pkt 
+     * @return NetErr_t 
+     */
     NetErr_t CheckEtherFrame(std::shared_ptr<PacketBuffer>& pkt)
     {
+    // 1. 判断数据大小满足帧的大小,以太网帧最小64字节
         if (pkt->DataSize() < sizeof(EtherHdr))
-            return NET_ERR_PARAM;
+            return NET_ERR_INVALID_FRAME;
 
-        
+    // 2. 校验和
+
         return NET_ERR_OK;
     }
 
-    bool EtherPush(std::shared_ptr<PacketBuffer> pkt, PROTO_TYPE type)
+    uint32_t CheckSum(std::shared_ptr<PacketBuffer>& pkt)
     {
-        EtherHdr ether_hdr;
-        ether_hdr.protocol = type;
-        if (type == TYPE_IPV4)
-        {
-            IPV4_Hdr* ipv4_hdr = pkt->GetObjectPtr<IPV4_Hdr>();
-            NetInfo* src_ip_info = NetInit::GetInstance()->GetNetworkInfo(ipv4_hdr->src_ipaddr);
-
-            bool ret = ArpPush((uint8_t*)&ipv4_hdr->src_ipaddr, (uint8_t*)&ipv4_hdr->dst_ipaddr, ether_hdr.dst_addr);
-            if (ret == false)
-            {
-                pkt.reset();
-                return false;
-            }
-
-            EtherHdr* hdr_ptr = pkt->AllocateObject<EtherHdr>();
-            *hdr_ptr = ether_hdr;
-            hdr_ptr->data = ipv4_hdr;
-        }
-        else 
-        {
-            Arp* arp = pkt->GetObjectPtr<Arp>();
-            memcpy(ether_hdr.src_addr, arp->src_hwaddr, sizeof(ether_hdr.src_addr));
-            memcpy(ether_hdr.dst_addr, arp->dst_hwaddr, sizeof(ether_hdr.dst_addr));
-        }
+        uint32_t checksum; 
         
-        auto it = kNetInterfaces.find(*(uint32_t*)&ether_hdr.dst_addr);
-        it->second->PushPacket(pkt);
-
-        return true;
+        return checksum;
     }
 
+
+    void EtherHost2Network(EtherHdr* ether)
+    {
+        // TODO: 源mac和目标mac待转换
+        ether->protocol = ntohl(ether->protocol);
+    }
+
+
+    void EtherNetwork2Host(EtherHdr* ether)
+    {
+        // TODO: 源mac和目标mac待转换
+        ether->protocol = ntohl(ether->protocol);
+    }
+
+
+
+
+///////////////////////////////////////////////////////////////// 以下是提供给外面的接口
     /**
-     * @brief 传递给
+     * @brief 提供给上层的接口,封装成以太网帧并通过网卡发送出去
+     * 
+     * @param pkt 
+     * @param type 
+     * @param src_iface 
+     * @param dst_iface_info 
+     * @return NetErr_t 
+     */
+    NetErr_t EtherPush(std::shared_ptr<PacketBuffer> pkt, PROTO_TYPE type, NetInterface* src_iface, NetInfo* dst_iface_info)
+    {
+        EtherHdr ether_hdr;
+        EtherTail ether_tail;
+        ether_hdr.protocol = type;
+    // 设置源mac和目标mac地址
+        memcpy(ether_hdr.src_addr, src_iface->GetNetInfo()->mac, sizeof(ether_hdr.src_addr));
+        memcpy(ether_hdr.dst_addr, dst_iface_info->mac, sizeof(ether_hdr.dst_addr));
+
+        *(uint32_t*)ether_tail.checksum = CheckSum(pkt);
+        EtherHost2Network(&ether_hdr);
+    // 添加以太网的头和尾部校验和(根据抓包好像基本都没有校验字段)
+        pkt->AddHeader(sizeof(EtherHdr), (const unsigned char*)&ether_hdr);
+        //pkt->AddTail(sizeof(EtherTail), (const unsigned char *)&ether_tail);
+
+        return src_iface->NetTx(pkt);
+    }
+
+
+
+
+    /**
+     * @brief 提供给下层的接口,也就是解封装数据包,如果合法则传递给上层
      * 
      * @param pkt 
      * @return true 
      * @return false 
      */
-    bool EtherPop(std::shared_ptr<PacketBuffer> pkt)
+    NetErr_t EtherPop(std::shared_ptr<PacketBuffer> pkt, bool def)
     {
-        
+        if (CheckEtherFrame(pkt) != NET_ERR_OK) // 检验合法性
+        {
+            pkt.reset();
+            return NET_ERR_INVALID_FRAME;
+        }
 
-        return true;
+        EtherHdr* hdr = pkt->GetObjectPtr<EtherHdr>();
+        EtherNetwork2Host(hdr);
+        uint16_t protocol = hdr->protocol;
+
+    // 去掉以太网的头和尾部
+        pkt->RemoveHeader(sizeof(EtherHdr));
+        pkt->RemoveTail(sizeof(EtherTail));
+
+        switch (protocol)
+        {
+            case TYPE_IPV4: 
+                IPv4Pop(pkt);   // 处理ipv4数据包
+                break;
+            case TYPE_ARP:
+                ArpPop(pkt);    // 处理arp数据包
+                break;
+            default:    // 对于ipv4和arp以外的协议不处理
+                pkt.reset();
+                return NET_ERR_OK;
+        }
+
+        return NET_ERR_OK;
     }
 }

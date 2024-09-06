@@ -30,12 +30,13 @@
 
 namespace netstack 
 {
+    std::vector<NetInfo*> kDevices;
 
 
     ////////////////////////////////////////////////// PcapNICDriver
     PcapNICDriver::~PcapNICDriver()
     {
-        for (auto& device : devices_)
+        for (auto& device : kDevices)
             pcap_close(device->device);
     }
 
@@ -47,9 +48,6 @@ namespace netstack
             throw std::runtime_error("open network card failed");
     }
 
-
-    
-    
     bool PcapNICDriver::OpenAllDefaultDevice()
     {
         pcap_if_t* all_devices, *dev;
@@ -115,54 +113,19 @@ namespace netstack
                     info->name = dev->name;
                 // 设置网卡操作的指针
                     info->device = handle;
-                    devices_.push_back(info);   
+                    kDevices.push_back(info);   
                     if (info->type == NETIF_TYPE_LOOP)
-                        loop_device_ = devices_.back();
+                        loop_device_ = kDevices.back();
                 }
             }
         }
-        for (auto& device : devices_)
+        for (auto& device : kDevices)
         {
             uint64_t mac = mac_map.find(device->name)->second;
             memcpy(device->mac, &mac, sizeof(char) * 6);
         }
         
         return true;
-    }
-
-
-    NetInfo* PcapNICDriver::GetNetworkPtr(std::string name, uint32_t ip, NetIfType type)
-    {
-        if (name.empty() && ip == 0)
-            return nullptr;
-
-        if (type == NETIF_TYPE_LOOP)
-            return loop_device_;
-
-        NetInfo* info = nullptr;
-        size_t size = devices_.size();
-        for (size_t i = 0; i < size; i++)
-        {
-            if (!name.empty())
-            {
-                if (devices_[i]->name == name)
-                {
-                    info = devices_[i];
-                    break;
-                }
-            }
-            else if (ip != 0)
-            {
-                uint32_t ip_tmp = *(uint32_t*)devices_[i]->ip;
-                if (ip_tmp == ip)
-                {
-                    info = devices_[i];
-                    break;
-                }
-            }
-        }
-
-        return info;
     }
 
 
@@ -382,7 +345,7 @@ namespace netstack
         }
 
         info->device = device;
-        devices_.push_back(info);   // TODO:
+        kDevices.push_back(info);   // TODO:
         return NET_ERR_OK;
     }
 

@@ -21,6 +21,8 @@ namespace netstack
     public:
         NetInterface(NetInfo* netinfo, int queue_max_threshold = DEFAULT_TX_QUEUE_LEN);
         virtual ~NetInterface();
+        bool operator<(const NetInterface& rhs) 
+        { return netif_fd_ < rhs.netif_fd_; }
     public:
         void SetDefaultNetif(NetInterface* netif);
         void DisplayInfo();
@@ -36,6 +38,7 @@ namespace netstack
 
         bool NetRx();   // 从网卡读取数据
         bool NetTx();   // 向网卡写入数据
+        NetErr_t NetTx(SharedPkt pkt);
     public:
         
     private:

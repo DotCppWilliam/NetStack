@@ -5,12 +5,14 @@
 #include <sys/epoll.h>
 #include <vector>
 #include <unistd.h>
+#include <map>
 
 namespace netstack 
 {
-    RecvEventLoop::RecvEventLoop(std::list<NetInterface*>* netiflists, ThreadPool& pool)
-        : epollfd_(-1), start_(false), 
-        netiflists_(netiflists), pool_(pool)
+    extern std::map<uint32_t, NetInterface*> kNetifacesMap;
+
+    RecvEventLoop::RecvEventLoop(ThreadPool& pool)
+        : epollfd_(-1), start_(false), pool_(pool)
     {
         
     }
@@ -23,8 +25,8 @@ namespace netstack
         
         if (epollfd_ != -1)
         {
-            for (auto& netif : *netiflists_)
-                epoll_ctl(epollfd_, EPOLL_CTL_DEL, netif->GetFd(), nullptr);
+            for (auto& netif : kNetifacesMap)
+                epoll_ctl(epollfd_, EPOLL_CTL_DEL, netif.second->GetFd(), nullptr);
             close(epollfd_);
         }
     }
@@ -33,11 +35,10 @@ namespace netstack
     {
         if (start_) 
             return true;
-        if (netiflists_ == nullptr)
-            return false;
 
         if (InitEpoll() == false)
             return false;
+
 
         start_ = true;
         recv_loop_thread_.Start();
@@ -56,10 +57,10 @@ namespace netstack
 
         struct epoll_event event;
         event.events = EPOLLIN; // 可读事件
-        for (auto& netif : *netiflists_)
+        for (auto& netif : kNetifacesMap)
         {
-            event.data.ptr = netif;
-            if (epoll_ctl(epollfd_, EPOLL_CTL_ADD, netif->GetFd(), &event) == -1)
+            event.data.ptr = netif.second;
+            if (epoll_ctl(epollfd_, EPOLL_CTL_ADD, netif.second->GetFd(), &event) == -1)
             {
                 perror("epoll_ctl ADD failed: ");
                 return false;
@@ -72,7 +73,7 @@ namespace netstack
 
     void RecvEventLoop::ThreadFunc()
     {
-        std::vector<struct epoll_event> events(netiflists_->size());
+        std::vector<struct epoll_event> events(kNetifacesMap.size());
         while (start_)
         {
             int nfds = epoll_wait(epollfd_, events.data(), 10, -1);

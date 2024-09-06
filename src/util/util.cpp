@@ -4,12 +4,16 @@
 #include <cstdio>
 #include <limits>
 #include <random>
+#include <mutex>
 
 namespace netstack 
 {
-
     void DumpHex(const unsigned char* data, size_t size)
     {
+        static std::mutex kMutex;
+
+        kMutex.lock();
+        printf("\n======================================================\n");
         int cnt = 0;
         int line_cnt = 1;
         for (size_t i = 0; i < size; i++, cnt++)
@@ -33,6 +37,9 @@ namespace netstack
             fflush(stdout);
         }
         printf("\n");
+        printf("======================================================\n");
+        fflush(stdout);
+        kMutex.unlock();
     }
 
 

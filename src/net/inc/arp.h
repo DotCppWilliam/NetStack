@@ -9,10 +9,12 @@
 
 #include "packet_buffer.h"
 #include "time_entry.h"
+#include "net_err.h"
+
 #include <cstdint>
 #include <memory>
-#include <shared_mutex>
-#include <unordered_map>
+#include <atomic>
+#include <map>
 #include <cstring>
 
 namespace netstack
@@ -26,18 +28,22 @@ namespace netstack
     #pragma pack(1)
     struct ArpCache
     {
-        ArpCache(uint64_t mac_num = 0) 
-            : mac(mac_num), timeout( { ARP_TIMEOUT, 0 } ) {}
-        uint64_t mac : 6;
+        ArpCache() 
+            : timeout( { ARP_TIMEOUT, 0 } ) {}
+        void SetMac(uint8_t* mac_param)
+        { memcpy(mac, mac_param, 6); }
+
+        uint8_t mac[6];
         TimeEntry timeout;          // 超时时间, 默认超时时间为 60秒
         bool is_expired = false;    // 是否过期
+        bool is_invalid = true;     // 默认为无效的
     };
     #pragma pack()
 
-    // TODO: 如果清除arp缓存表,会向默认网关发送ARP包. 这个应该会配合路由表,暂时搁置,等待完成路由表回来做
     // ARP缓存表
-    static std::unordered_map<uint32_t, ArpCache> kArpCaches;  
-    static std::shared_mutex kRwMutex;  // 读写锁
+    static std::map<uint32_t, ArpCache> kArpCaches;  
+    static std::atomic<pthread_t> kArpAtomicFlag;
+
 
     #pragma pack(1)
     struct Arp 
@@ -80,12 +86,13 @@ namespace netstack
      * @return true 
      * @return false 
      */
-    bool ArpPush(uint8_t in_src_ip[4], uint8_t in_dst_ip[4], uint8_t out_dst_mac[6]);
+    NetErr_t ArpPush(uint8_t in_src_ip[4], uint8_t in_need_ip[4], uint8_t out_dst_mac[6]);
 
     /**
-     * @brief 提供给下层(以太网)的接口,用来处理ARP
+     * @brief 
      * 
      * @param pkt 
+     * @return NetErr_t 
      */
-    void ArpPop(std::shared_ptr<PacketBuffer> pkt);
+    NetErr_t ArpPop(std::shared_ptr<PacketBuffer> pkt);
 }

@@ -87,7 +87,7 @@ namespace netstack
         const u_char* data;
         pcap_next_ex(netinfo_->device, &hdr, &data);
 
-        std::shared_ptr<PacketBuffer> pkt = std::make_shared<PacketBuffer>(hdr->len);
+        std::shared_ptr<PacketBuffer> pkt = std::make_shared<PacketBuffer>(hdr->caplen);
         pkt->Write(data, hdr->len);
 
         if (recv_queue_.TryPush<std::shared_ptr<PacketBuffer>>(pkt) == false)
@@ -125,6 +125,17 @@ namespace netstack
         return true;
     }
 
+    NetErr_t NetInterface::NetTx(SharedPkt pkt)
+    {
+        if (pkt->DataSize() == 0)
+            return NET_ERR_PARAM;
+
+        NetErr_t ret = PcapNICDriver::SendData(netinfo_->device, pkt);
+        pkt.reset();
+
+        return ret;
+    }
+
 
     void HandleRecvPktCallback(NetInterface* iface)
     {
@@ -132,6 +143,10 @@ namespace netstack
         bool ret = iface->recv_queue_.TryPop(pkt);
         if (ret == false)
             return;
-        EtherPop(pkt);  // 交给以太网来处理,然后逐层向上传递
+
+        bool is = false;
+        if (iface->netinfo_->name == "enp0s3")
+            is = true;
+        EtherPop(pkt, is);  // 交给以太网来处理,然后逐层向上传递
     }
 }

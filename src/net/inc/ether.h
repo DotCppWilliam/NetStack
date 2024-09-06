@@ -12,6 +12,10 @@
 
 #include "net_type.h"
 #include "packet_buffer.h"
+#include "net_err.h"
+#include "net_interface.h"
+#include "sys_plat.h"
+
 #include <cstdint>
 #include <memory>
 #include <netinet/in.h>
@@ -31,14 +35,12 @@ namespace netstack
             memcpy(dst_addr, hdr.dst_addr, sizeof(dst_addr));
             memcpy(src_addr, hdr.src_addr, sizeof(src_addr));
             protocol = hdr.protocol;
-            data = hdr.data;
 
             return *this;
         }
         uint8_t     dst_addr[6];    // 目标地址
         uint8_t     src_addr[6];    // 源地址
         uint16_t    protocol;       // 协议类型或长度
-        void*       data = nullptr; // 数据载荷
     };
 
     struct EtherTail 
@@ -117,16 +119,19 @@ namespace netstack
         uint16_t protocol;
     };
     #pragma pack()
-
+    
+    void EtherSetDevices(std::list<NetInterface*>* netifs);
+    
     /**
-     * @brief 发送以太网帧
+     * @brief 提供给上层的接口,封装成以太网帧并通过网卡发送出去
      * 
      * @param pkt 
      * @param type 
-     * @return true 
-     * @return false 
+     * @param src_iface 
+     * @param dst_iface_info 需要由调用者来指定一个堆内存,由本函数来释放
+     * @return NetErr_t 
      */
-    bool EtherPush(std::shared_ptr<PacketBuffer> pkt, PROTO_TYPE type);
+    NetErr_t EtherPush(std::shared_ptr<PacketBuffer> pkt, PROTO_TYPE type, NetInterface* src_iface, NetInfo* dst_iface_info);
 
     /**
      * @brief 接收以太网帧;解析是什么协议,然后交给具体的模块去处理
@@ -135,5 +140,5 @@ namespace netstack
      * @return true 
      * @return false 
      */
-    bool EtherPop(std::shared_ptr<PacketBuffer> pkt);
+    NetErr_t EtherPop(std::shared_ptr<PacketBuffer> pkt, bool def);
 }

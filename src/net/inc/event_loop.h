@@ -15,15 +15,13 @@
 #include "sys_plat.h"
 #include "threadpool.h"
 
-#include <list>
-
 namespace netstack
 {
     class NetInterface;
     class RecvEventLoop : public NonCopyable
     {
     public:
-        RecvEventLoop(std::list<NetInterface*>* netiflists, ThreadPool& pool);
+        RecvEventLoop(ThreadPool& pool);
         ~RecvEventLoop();
     public:
         bool Start();
@@ -34,7 +32,6 @@ namespace netstack
         int epollfd_;
         bool start_;
         CustomThread recv_loop_thread_;
-        std::list<NetInterface*>* netiflists_ = nullptr;
         ThreadPool& pool_;
     };
 

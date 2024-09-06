@@ -3,8 +3,6 @@
 #include "at_exit.h"
 #include "event_loop.h"
 #include "net_err.h"
-#include "net_interface.h"
-#include "net_pcap.h"
 #include "noncopyable.h"
 #include "singlton.h"
 #include "sys_plat.h"
@@ -20,8 +18,9 @@ namespace netstack
         NetInit();
         ~NetInit();
     public:
-        NetInfo* GetNetworkInfo(uint32_t ip, std::string name = "");
         NetErr_t Init(size_t threadpool_cnt = 0);
+        ThreadPool& GetTaskThreadPool()
+        { return pool; }
     public:
         static NetInit* GetInstance()
         {  return Singleton<NetInit>::get(); }
@@ -31,7 +30,6 @@ namespace netstack
         Timer* timer_ = nullptr;            // 定时器
         ThreadPool pool;                    // 线程池,用来处理接收、发送数据包的处理工作
         RecvEventLoop* event_loop_;         // 读取网卡数据包事件循环
-        std::list<NetInterface*> netifs_;   // 网卡接口列表
         AtExitManager exit_manager_;
     };
 }
