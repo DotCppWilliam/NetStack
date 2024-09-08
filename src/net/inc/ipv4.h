@@ -118,12 +118,13 @@ namespace netstack
     #pragma pack(1)
     struct MsgReassembly    // 报文重组
     {
-        uint32_t recv_size; // 已收到的分片大小(只累加其中的数据大小)
+        uint32_t recv_size = 0;     // 已收到的分片大小(只累加其中的数据大小)
+        uint32_t total_size = 0;    // 如果有值代表收到了分片的最后一片
         // key: 分片偏移,   value: 接收到的分片
-        std::map<uint16_t, std::shared_ptr<PacketBuffer>> fragments;
+        std::map<uint64_t, std::shared_ptr<PacketBuffer>> fragments;
     };
     #pragma pack()
 
-    NetErr_t IPv4Push(std::shared_ptr<PacketBuffer> pkt, uint8_t* src_ip, uint8_t* dst_ip, PROTO_TYPE type);
+    NetErr_t IPv4Push(std::shared_ptr<PacketBuffer> pkt, uint32_t src_ip, uint32_t dst_ip, PROTO_TYPE type);
     NetErr_t IPv4Pop(std::shared_ptr<PacketBuffer> pkt);
 }

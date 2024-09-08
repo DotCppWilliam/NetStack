@@ -33,7 +33,8 @@ namespace netstack
         {
             return total_size_;
         }
-
+        void SetDataSize(size_t size)
+        { curr_pos_ += size; }
         size_t FreeSize() const
         {
             return total_size_ - curr_pos_;
@@ -82,12 +83,15 @@ namespace netstack
         int RemoveTail(size_t size);
         int Resize(size_t);
         int Append(PacketBuffer& dest);
-        int Write(const unsigned char* data, size_t size);
-        int Read(unsigned char* dest, size_t size, PacketBlock* block = nullptr);
+        int Write(const unsigned char* data, size_t size, bool pre_alloc = false);
+        int Read(unsigned char* dest, size_t size, PacketBlock* block = nullptr, int offset = 0);
         int Seek(int offset);
+        int AddDataSize(size_t size);
         size_t DataSize();
         size_t TotalSize() const
         { return total_size_; }
+        void FillTail(size_t size);
+        void Merge(PacketBuffer& pkt);
 
         template <typename T>
         T* AllocateObject()
@@ -125,6 +129,7 @@ namespace netstack
 
             return reinterpret_cast<T*>(head->GetDataPtr()) + size;
         }
+        
     private:
         PacketBlock* CreateBlock(size_t size);
     private:

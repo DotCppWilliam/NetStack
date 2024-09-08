@@ -51,4 +51,11 @@ namespace netstack
         std::uniform_int_distribution<uint16_t> distribution(0, max_num);
         return distribution(generator);
     }
+
+
+    void MacEndianConvert(uint8_t* mac)
+    {
+        for (int beg = 0, rbeg = 5; (beg + 1) != rbeg; beg++, rbeg--)
+            std::swap(mac[beg], mac[rbeg]);
+    }
 }

@@ -131,7 +131,8 @@ namespace netstack
      * @param dst_iface_info 需要由调用者来指定一个堆内存,由本函数来释放
      * @return NetErr_t 
      */
-    NetErr_t EtherPush(std::shared_ptr<PacketBuffer> pkt, PROTO_TYPE type, NetInterface* src_iface, NetInfo* dst_iface_info);
+    NetErr_t EtherPush(std::shared_ptr<PacketBuffer> pkt, PROTO_TYPE type, NetInterface* src_iface, 
+        NetInfo* dst_iface_info, NetInterface* send_iface = nullptr);
 
     /**
      * @brief 接收以太网帧;解析是什么协议,然后交给具体的模块去处理

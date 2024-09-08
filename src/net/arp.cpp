@@ -33,6 +33,12 @@ namespace netstack
     };
     struct WaitArpRelpyKey
     {
+        WaitArpRelpyKey(uint8_t* src_ip, uint8_t* dst_ip)
+        {
+            this->src_ip = *(uint32_t*)src_ip;
+            this->dst_ip = *(uint32_t*)dst_ip;
+        }
+
         bool operator<(const WaitArpRelpyKey& rhs) const
         {
             if (src_ip != rhs.src_ip)
@@ -66,8 +72,8 @@ namespace netstack
 
     void SetDefaultArp(Arp* arp)
     {
-        arp->hw_type = htons(ARP_HW_ETHER);
-        arp->proto_type = htons(TYPE_IPV4);
+        arp->hw_type = ARP_HW_ETHER;
+        arp->proto_type = TYPE_IPV4;
         arp->hw_addr_size = 6;
         arp->proto_addr_size = 4;
     }
@@ -75,16 +81,16 @@ namespace netstack
 
     void ArpHost2Network(Arp* arp)
     {
-        arp->hw_type = htonl(arp->hw_type);
-        arp->proto_type = htonl(arp->proto_type);
-        arp->op_code = htonl(arp->op_code);
+        arp->hw_type = htons(arp->hw_type);
+        arp->proto_type = htons(arp->proto_type);
+        arp->op_code = htons(arp->op_code);
     }
 
     void ArpNetwork2Host(Arp* arp)
     {
-        arp->hw_addr_size = ntohl(arp->hw_addr_size);
-        arp->proto_type = ntohl(arp->proto_type);
-        arp->op_code = ntohl(arp->op_code);
+        arp->hw_type = ntohs(arp->hw_type);
+        arp->proto_type = ntohs(arp->proto_type);
+        arp->op_code = ntohs(arp->op_code);
     }
 
     /**
@@ -107,7 +113,6 @@ namespace netstack
         memset(arp->dst_hwaddr, 0, sizeof(arp->dst_hwaddr));
 
         memcpy(arp->dst_ipaddr, dst_ip, sizeof(arp->dst_ipaddr));
-        ArpHost2Network(arp);
     }
 
     /**
@@ -146,7 +151,7 @@ namespace netstack
      * @param dst_ip 
      * @return NetInterface* 
      */
-    NetInterface* MatchSubnet(uint8_t dst_ip[4])
+    NetInterface* MatchSubnet(uint8_t dst_ip[4], uint32_t* gateway)
     {
         NetInterface* netiface = nullptr;
 
@@ -169,34 +174,56 @@ namespace netstack
             }
         }
 
+        if (gateway)
+            *gateway = *(uint32_t*)net_sub_addr;
         return netiface;
     }
 
 
     // 等待arp响应包
-    NetErr_t HandleWaitArpReply(WaitArpRelpyKey key, WaitArpReplyVal* wait_val, uint8_t* out_mac)
+    NetErr_t HandleWaitArpReply(WaitArpRelpyKey key, WaitArpReplyVal* wait_val, 
+        uint8_t* out_mac, Arp arp, long* time)
     {
-        auto start = std::chrono::steady_clock::now();
-        
+        using namespace std::chrono;
+
+        NetInterface* src_iface = kNetifacesMap[*(uint32_t*)arp.src_ipaddr];
+        auto start = steady_clock::now();
+        auto now = start, beg = start;
+        int cnt = 5;  
+
         // 这块使用自旋,因为获取arp响应包都是局域网,速度是很快的.
         // 如果这个时候让出CPU转而去睡眠,那么回头再被调度来执行,上下文切换会很浪费性能
         while (!wait_val->flag.load(std::memory_order_acquire))
         {
-            auto now = std::chrono::steady_clock::now();
-            std::chrono::duration<double> elapsed = now - start;
-            if (elapsed.count() > 1)    // 如果过了一秒还是没有收到arp响应包,那网络状态肯定有问题,则直接返回
+            now = steady_clock::now();
+            auto elapsed = duration_cast<std::chrono::milliseconds>(now - start).count();
+            if (elapsed > 500)
             {
-                std::unique_lock<std::mutex> lock(kWaitArpReplyMutex);
-                kWaitArpReplyMap.erase(key);
+                start = now;
+                if (cnt == 0 && wait_val->flag.load(std::memory_order_acquire) == false)
+                {
+                    std::unique_lock<std::mutex> lock(kWaitArpReplyMutex);
+                    kWaitArpReplyMap.erase(key);
 
-                delete wait_val;
-                return NET_ERR_WAIT_ARP_TIMEOUT;    // 获取arp响应包超时
+                    delete wait_val;
+                    return NET_ERR_WAIT_ARP_TIMEOUT;    // 获取arp响应包超时
+                }
+
+                std::shared_ptr<PacketBuffer> pkt = std::make_shared<PacketBuffer>(sizeof(Arp));
+                Arp* arp_ptr = pkt->GetObjectPtr<Arp>();
+                *arp_ptr = arp;
+                EtherPush(pkt, TYPE_ARP, src_iface, nullptr);
+
+                cnt--;
             }
         }
 
     // 成功获取arp响应包, 我们在kWaitArpReplyMap添加的项由其他线程删除不用管
         memcpy(out_mac, wait_val->mac, 6);
         delete wait_val;   // 释放堆内存
+
+        if (time)
+            *time = duration_cast<std::chrono::milliseconds>(now - beg).count();
         
         return NET_ERR_OK;
     }
@@ -212,7 +239,7 @@ namespace netstack
      * @param out_dst_mac 
      * @return NetErr_t NET_ERR_OK: 获取成功; NET_ERR_WAIT_ARP_TIMEOUT: 超时
      */
-    NetErr_t ArpPush(uint8_t in_src_ip[4], uint8_t in_need_ip[4], uint8_t out_dst_mac[6])
+    NetErr_t ArpPush(uint8_t in_src_ip[4], uint8_t in_need_ip[4], uint8_t out_dst_mac[6], long* time)
     {
         NetInterface* netif = MatchSubnet(in_need_ip);
         if (netif == nullptr)
@@ -233,6 +260,9 @@ namespace netstack
 
         if (cache.is_invalid)    // 找不到这个ip的mac地址
         {
+            NetInterface* src_iface = kNetifacesMap[*(uint32_t*)in_src_ip];
+            NetInfo* dst_iface_info = netif->GetNetInfo();
+
             // 需要发送ARP请求包获取局域网内某个ip的mac地址
             std::shared_ptr<PacketBuffer> pkt = std::make_shared<PacketBuffer>(sizeof(Arp));
             Arp* arp = pkt->GetObjectPtr<Arp>();
@@ -242,17 +272,17 @@ namespace netstack
             ArpHost2Network(arp);   // 转换成网络字节序
 
         // 添加一个arp响应包的等待请求
-            WaitArpRelpyKey key;
+            WaitArpRelpyKey key(in_src_ip, in_need_ip);
             WaitArpReplyVal* value = new WaitArpReplyVal;
             {
                 std::unique_lock<std::mutex> lock(kWaitArpReplyMutex); 
-                kWaitArpReplyMap[key] = value;
+                kWaitArpReplyMap.insert( { key, value });
             }
         // 发送arp请求包
-            EtherPush(pkt, TYPE_ARP, kNetifacesMap[*(uint32_t*)in_src_ip], netif->GetNetInfo());
+            EtherPush(pkt, TYPE_ARP, src_iface, nullptr);
         
         // 当前线程等待arp响应包,有小概率会超时,没有等待成功
-            return HandleWaitArpReply(key, value, out_dst_mac);
+            return HandleWaitArpReply(key, value, out_dst_mac, *arp, time);
         }
         else 
             memcpy(out_dst_mac, cache.mac, 6);
@@ -289,19 +319,22 @@ namespace netstack
         {
         // 检查是否有等待当前arp响应包的线程,如果有及时处理
             std::unique_lock<std::mutex> lock(kWaitArpReplyMutex);
-            it = std::find_if(kWaitArpReplyMap.begin(), kWaitArpReplyMap.end(),
-            [arp](std::pair<WaitArpRelpyKey, WaitArpReplyVal*> p) {
-                return p.first.src_ip == *(uint32_t*)arp->dst_ipaddr 
-                    && p.first.dst_ip == *(uint32_t*)arp->src_ipaddr;
-            });
-            
-            if (it != kWaitArpReplyMap.end())   // 表示有线程正在等待这个arp响应包
-                memcpy(it->second->mac, arp->src_hwaddr, 6);
-            WaitArpReplyVal* val = it->second;
-            kWaitArpReplyMap.erase(it);
-            lock.unlock();
+            if (!kWaitArpReplyMap.empty())
+            {
+                it = std::find_if(kWaitArpReplyMap.begin(), kWaitArpReplyMap.end(),
+                [arp](std::pair<WaitArpRelpyKey, WaitArpReplyVal*> p) {
+                    return p.first.src_ip == *(uint32_t*)arp->dst_ipaddr 
+                        && p.first.dst_ip == *(uint32_t*)arp->src_ipaddr;
+                });
+                
+                if (it != kWaitArpReplyMap.end())   // 表示有线程正在等待这个arp响应包
+                    memcpy(it->second->mac, arp->src_hwaddr, 6);
+                WaitArpReplyVal* val = it->second;
+                kWaitArpReplyMap.erase(it->first);
+                lock.unlock();
 
-            val->flag.store(true, std::memory_order_release);
+                val->flag.store(true, std::memory_order_release);
+            }
         }
         
         pthread_t old = 0;

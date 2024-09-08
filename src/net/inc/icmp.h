@@ -1,6 +1,7 @@
 #pragma once
 
 // ICMPv4协议
+#include "net_err.h"
 #include "packet_buffer.h"
 #include <memory>
 namespace netstack 
@@ -27,6 +28,6 @@ namespace netstack
     #pragma pack()
 
 
-    void IcmpPush(std::shared_ptr<PacketBuffer> pkt);
+    NetErr_t IcmpPush(uint32_t dst_ip);
     void IcmpPop(std::shared_ptr<PacketBuffer> pkt);
 }

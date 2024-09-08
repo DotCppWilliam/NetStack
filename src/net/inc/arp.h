@@ -31,7 +31,10 @@ namespace netstack
         ArpCache() 
             : timeout( { ARP_TIMEOUT, 0 } ) {}
         void SetMac(uint8_t* mac_param)
-        { memcpy(mac, mac_param, 6); }
+        { 
+            memcpy(mac, mac_param, 6); 
+            is_invalid = false;
+        }
 
         uint8_t mac[6];
         TimeEntry timeout;          // 超时时间, 默认超时时间为 60秒
@@ -48,6 +51,19 @@ namespace netstack
     #pragma pack(1)
     struct Arp 
     {
+        Arp(const Arp& rhs)
+        {
+            hw_type = rhs.hw_type;
+            proto_type = rhs.proto_type;
+            hw_addr_size = rhs.hw_addr_size;
+            proto_addr_size = rhs.proto_addr_size;
+            op_code = rhs.op_code;
+            memcpy(src_hwaddr, rhs.src_hwaddr, sizeof(src_hwaddr));
+            memcpy(src_ipaddr, rhs.src_ipaddr, sizeof(src_ipaddr));
+            memcpy(dst_hwaddr, rhs.dst_hwaddr, sizeof(dst_hwaddr));
+            memcpy(dst_ipaddr, rhs.dst_ipaddr, sizeof(dst_ipaddr));
+        }
+
         Arp& operator=(const Arp& arp)
         {
             if (&arp == this)   
@@ -77,7 +93,8 @@ namespace netstack
     };
     #pragma pack()
 
-
+    class NetInterface;
+    NetInterface* MatchSubnet(uint8_t dst_ip[4], uint32_t* gateway = nullptr);
     /**
      * @brief 提供给上层的接口,获取ip地址对应的mac地址
      * 
@@ -86,7 +103,7 @@ namespace netstack
      * @return true 
      * @return false 
      */
-    NetErr_t ArpPush(uint8_t in_src_ip[4], uint8_t in_need_ip[4], uint8_t out_dst_mac[6]);
+    NetErr_t ArpPush(uint8_t in_src_ip[4], uint8_t in_need_ip[4], uint8_t out_dst_mac[6], long* time = nullptr);
 
     /**
      * @brief 

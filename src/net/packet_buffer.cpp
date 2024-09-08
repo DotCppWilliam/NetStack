@@ -110,10 +110,11 @@ namespace netstack
     ////////////////////////////////////// PacketBuffer
     PacketBuffer::PacketBuffer(size_t size)
         : total_size_(0),
-        data_size_(0),
+        data_size_(size),
         curr_block_(nullptr)
     {
-        CreateBlock(size);
+        PacketBlock* blk = CreateBlock(size);
+        blk->SetDataSize(size);
     }
 
     PacketBuffer::~PacketBuffer()
@@ -127,7 +128,7 @@ namespace netstack
         PacketBlock* block = AllocateBlock(size);
         block->SetData(size, data);
         data_size_ += size;
-        total_size_ += AlignUp<size_t>(size);
+        total_size_ += size;
 
         PacketBlock* head = *blocks_.begin();
         head->SetPrevNode(block);
@@ -158,11 +159,13 @@ namespace netstack
                 PacketBlock::CuttingPacket(block, size, block->TotalSize() - size);
             blocks_.push_front(after_cutting_pkt);
             delete block;
+            curr_block_ = after_cutting_pkt;
         }
         else if (block->TotalSize() == size)
         {
             blocks_.pop_front();
             delete block;
+            curr_block_ = nullptr;
         }
         else if (block->TotalSize() < size)
             return -1;
@@ -205,10 +208,17 @@ namespace netstack
         return 0;
     }
 
-    int PacketBuffer::Write(const unsigned char* data, size_t size)
+    int PacketBuffer::Write(const unsigned char* data, size_t size, bool pre_alloc)
     {
         if (data == nullptr || size == 0)
             return -1;
+
+        if (pre_alloc)
+        {
+            memcpy(curr_block_->GetDataPtr(), data, size);
+
+            return 0;
+        }
 
 
         size_t free_size = curr_block_ ? curr_block_->FreeSize() : 0;
@@ -234,39 +244,36 @@ namespace netstack
         return -1;
     }
 
-    int PacketBuffer::Read(unsigned char* dest, size_t size, PacketBlock* block)
+    int PacketBuffer::Read(unsigned char* dest, size_t size, PacketBlock* block, int offset)
     {
         if (dest == nullptr || size == 0 || index_ + size > total_size_)
             return -1;
         
-        int start = 0;
-        PacketBlock* curr_block = *blocks_.begin();
-        if (index_ != 0)
-        {
-            int remaing_size = index_;
-            while (remaing_size && curr_block != nullptr)
-            {
-                if (curr_block->DataSize() < remaing_size)
-                {
-                    remaing_size -= curr_block->DataSize();
-                }
-                else if (curr_block->DataSize() >= remaing_size)
-                {
-                    start += remaing_size;
-                    remaing_size = 0;
-                }
+        if ((offset + size) > data_size_)
+            return -1;
 
-                curr_block = curr_block->next_;
+        int start = 0;
+        PacketBlock* curr = *blocks_.begin();
+        while (curr)
+        {
+            if (curr->DataSize() < offset)
+            {
+                offset -= curr->DataSize();
+                curr = curr->next_;
             }
+            break;
         }
 
-        int curr_copy_size = curr_block->DataSize() - start;
         int index = 0;
-        while (size && curr_block)
+        int curr_blk_size = 0;
+        while (curr && size)
         {
-            memcpy(dest + index, (char*)curr_block->GetDataPtr() + start, curr_copy_size);
-            size -= curr_copy_size;
-            curr_block = curr_block->next_;
+            curr_blk_size = (curr->DataSize() - start < size) ? curr->DataSize() - start : size;
+            memcpy(dest + index, (char*)curr->GetDataPtr() + start, curr_blk_size);
+            size -= curr->DataSize() - start;
+            index += curr->DataSize() - start;
+            curr = curr->next_;
+            start = 0;
         }
         
         return 0;
@@ -295,7 +302,11 @@ namespace netstack
         return data_size_;
     }
 
-
+    int PacketBuffer::AddDataSize(size_t size)
+    {
+        data_size_ += size;
+        return 0;
+    }
 
     PacketBlock* PacketBuffer::CreateBlock(size_t size)
     {
@@ -309,5 +320,36 @@ namespace netstack
         total_size_ += alloc_mem_size;
 
         return block;
+    }
+
+    void PacketBuffer::FillTail(size_t size)
+    {
+        PacketBlock* blk = AllocateBlock(size);
+        memset(blk->GetDataPtr(), 0, sizeof(size));
+        blk->SetPrevNode(curr_block_);
+        blocks_.push_back(blk);
+        blk->SetDataSize(size);
+
+        total_size_ += size;
+        data_size_ += size;
+    }
+
+
+    void PacketBuffer::Merge(PacketBuffer& pkt)
+    {
+        PacketBlock* tail = *blocks_.end();
+        PacketBlock* curr = *pkt.blocks_.begin();
+        while (curr)
+        {
+            PacketBlock* new_pkt = AllocateBlock(curr->TotalSize());
+            new_pkt->SetPrevNode(tail);
+            tail = new_pkt;
+            new_pkt->SetData(curr->DataSize(), (const unsigned char*)curr->GetDataPtr());
+            total_size_ += pkt.TotalSize();
+            data_size_ += pkt.DataSize();
+            new_pkt->SetDataSize(pkt.DataSize());
+
+            curr = curr->next_;
+        }
     }
 }

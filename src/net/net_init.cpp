@@ -5,6 +5,9 @@
 #include "net_interface.h"
 #include "net_pcap.h"
 #include "sys_plat.h"
+#include "routing.h"
+
+
 #include <vector>
 #include <map>
 
@@ -56,6 +59,9 @@ namespace netstack
         if (event_loop_ == nullptr)
             return NET_ERR_BAD_ALLOC;
         event_loop_->Start();
+    
+    // 初始化默认路由
+        InitRoutingMap();
 
     // 初始化定时器 TODO:
 

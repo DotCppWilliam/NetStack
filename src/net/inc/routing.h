@@ -2,7 +2,6 @@
 
 #include "net_interface.h"
 #include <cstdint>
-#include <map>
 
 namespace netstack
 {
@@ -29,28 +28,29 @@ namespace netstack
     
     enum RoutingFlag 
     {
-        ROUTE_UP        = 0x1,  // 该路由是激活的
-        ROUTE_GATEWAY   = 0x2,  // 数据报需要通过网关
-        ROUTE_HOST      = 0x4,  // 该条目是一个主机路由,而不是网络路由
-        ROUTE_REINSTATE = 0x8,  // 动态路由重新加入
-        ROUTE_DYNAMIC   = 0x10, // 由路由守护进程或daemon动态安装的
-        ROUTE_MODIFIED  = 0x20, // 由路由守护进程或daemon修改的
+        ROUTE_DEFAULT_GATEWAY   = 1,
+        ROUTE_DIRECT_SEND       = 2,
+        ROUTE_INDIRECT_SEND     = 4
     };
 
     #pragma pack(1)
     struct Routing 
     {
+        Routing();
+        ~Routing() = default;
+        Routing(const Routing& rhs);
+        Routing& operator=(const Routing& rhs);
+
         uint32_t        ip_;        // 目的地址
         uint32_t        gateway_;   // 网关
         uint32_t        netmask_;   // 掩码
         RoutingFlag     flag_;      // 标志
-        uint32_t        metric_;    // 跃点数
+        long            metric_;    // 跃点数,这里表示耗时时间
         NetInterface*   iface_;     // 接口
     };
     #pragma pack()
 
+    Routing GetRouting(uint32_t ip);
 
-    void RoutingMapInit();
-
-    extern std::map<uint32_t, Routing> kRoutingMap;    // 路由表
+    void InitRoutingMap();
 }

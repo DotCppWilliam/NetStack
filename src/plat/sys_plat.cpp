@@ -368,7 +368,6 @@ namespace netstack
         int data_size = pkt->DataSize();
         unsigned char* data_mem = new unsigned char[data_size];
         pkt->Read(data_mem, data_size);   // 进行一次网络数据包拷贝
-        DumpHex(data_mem, data_size);
 
         // 向网卡发送数据
         int i = pcap_inject(netif, data_mem, data_size);   
@@ -405,7 +404,6 @@ namespace netstack
                 continue;
             }
 
-            DumpHex(pkt_data, pkthdr->len);
             pkt = std::make_shared<PacketBuffer>(); // 创建数据包存放网络数据
             // 复制网络数据包,发生一次拷贝(无法避免,因为下一次pcap读取数据会将上一次内存清空)
             pkt->Write(pkt_data, pkthdr->len);
@@ -512,7 +510,9 @@ namespace netstack
     {
         while (!exit_)
         {
+            if (func_ == nullptr)
             {
+                
                 std::unique_lock<std::mutex> lock(mutex_);
                 cond_running_.wait(lock);
                 if (func_ == nullptr)   

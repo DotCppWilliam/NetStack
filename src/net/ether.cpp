@@ -41,8 +41,7 @@ namespace netstack
 
     void EtherHost2Network(EtherHdr* ether)
     {
-        // TODO: 源mac和目标mac待转换
-        ether->protocol = ntohl(ether->protocol);
+        ether->protocol = ntohs(ether->protocol);
     }
 
 
@@ -65,20 +64,23 @@ namespace netstack
      * @param dst_iface_info 
      * @return NetErr_t 
      */
-    NetErr_t EtherPush(std::shared_ptr<PacketBuffer> pkt, PROTO_TYPE type, NetInterface* src_iface, NetInfo* dst_iface_info)
+    NetErr_t EtherPush(std::shared_ptr<PacketBuffer> pkt, PROTO_TYPE type, NetInterface* src_iface, 
+        NetInfo* dst_iface_info, NetInterface* send_iface)
     {
         EtherHdr ether_hdr;
-        EtherTail ether_tail;
         ether_hdr.protocol = type;
     // 设置源mac和目标mac地址
         memcpy(ether_hdr.src_addr, src_iface->GetNetInfo()->mac, sizeof(ether_hdr.src_addr));
-        memcpy(ether_hdr.dst_addr, dst_iface_info->mac, sizeof(ether_hdr.dst_addr));
+        if (type == TYPE_IPV4)
+            memcpy(ether_hdr.dst_addr, dst_iface_info->mac, sizeof(ether_hdr.dst_addr));
+        else
+            memset(ether_hdr.dst_addr, 0xff, sizeof(ether_hdr.dst_addr));
 
-        *(uint32_t*)ether_tail.checksum = CheckSum(pkt);
-        EtherHost2Network(&ether_hdr);
+        ether_hdr.protocol = htons(ether_hdr.protocol);
+        if (pkt->DataSize() < 46)
+            pkt->FillTail(46 - pkt->DataSize());
     // 添加以太网的头和尾部校验和(根据抓包好像基本都没有校验字段)
         pkt->AddHeader(sizeof(EtherHdr), (const unsigned char*)&ether_hdr);
-        //pkt->AddTail(sizeof(EtherTail), (const unsigned char *)&ether_tail);
 
         return src_iface->NetTx(pkt);
     }
@@ -102,12 +104,16 @@ namespace netstack
         }
 
         EtherHdr* hdr = pkt->GetObjectPtr<EtherHdr>();
-        EtherNetwork2Host(hdr);
+        uint16_t p = hdr->protocol;
+        if (p == TYPE_ARP)
+        {
+            printf("是Arp响应包\n");
+        }
+        hdr->protocol = ntohs(hdr->protocol);
         uint16_t protocol = hdr->protocol;
 
     // 去掉以太网的头和尾部
         pkt->RemoveHeader(sizeof(EtherHdr));
-        pkt->RemoveTail(sizeof(EtherTail));
 
         switch (protocol)
         {

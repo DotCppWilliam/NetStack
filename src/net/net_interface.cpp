@@ -88,7 +88,7 @@ namespace netstack
         pcap_next_ex(netinfo_->device, &hdr, &data);
 
         std::shared_ptr<PacketBuffer> pkt = std::make_shared<PacketBuffer>(hdr->caplen);
-        pkt->Write(data, hdr->len);
+        pkt->Write(data, hdr->len, true);
 
         if (recv_queue_.TryPush<std::shared_ptr<PacketBuffer>>(pkt) == false)
         {
@@ -140,13 +140,19 @@ namespace netstack
     void HandleRecvPktCallback(NetInterface* iface)
     {
         SharedPkt pkt;
+        if (iface->recv_queue_.Empty())
+            return;
         bool ret = iface->recv_queue_.TryPop(pkt);
         if (ret == false)
             return;
 
         bool is = false;
-        if (iface->netinfo_->name == "enp0s3")
+        if (iface->netinfo_->name != "enp0s3")
+        {
             is = true;
+            pkt.reset();
+            return;
+        }
         EtherPop(pkt, is);  // 交给以太网来处理,然后逐层向上传递
     }
 }

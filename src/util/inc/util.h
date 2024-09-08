@@ -11,6 +11,8 @@ namespace netstack
 
     uint16_t GetRandomNum();
 
+    void MacEndianConvert(uint8_t* mac);
+
     template <typename T>
     std::string Num2HexStr(T num)
     {
