@@ -1,4 +1,5 @@
 #include "routing.h"
+#include "net_err.h"
 #include "net_init.h"
 #include "arp.h"
 #include "net_interface.h"
@@ -74,12 +75,15 @@ namespace netstack
             }
         }
         
-        kDefGateway.ip_ = 0;
-        kDefGateway.gateway_ = *(uint32_t*)subnet_addr;
-        kDefGateway.netmask_ = *(uint32_t*)def_gateway->GetNetInfo()->netmask;
-        kDefGateway.flag_ = RoutingFlag(ROUTE_DEFAULT_GATEWAY | ROUTE_DIRECT_SEND);
-        kDefGateway.iface_ = def_gateway;
-        kRoutingMap.insert({0, kDefGateway});   // 插入默认路由
+        if (ret == NET_ERR_OK)
+        {
+            kDefGateway.ip_ = 0;
+            kDefGateway.gateway_ = *(uint32_t*)subnet_addr;
+            kDefGateway.netmask_ = *(uint32_t*)def_gateway->GetNetInfo()->netmask;
+            kDefGateway.flag_ = RoutingFlag(ROUTE_DEFAULT_GATEWAY | ROUTE_DIRECT_SEND);
+            kDefGateway.iface_ = def_gateway;
+            kRoutingMap.insert({0, kDefGateway});   // 插入默认路由
+        }
     }
 
     Routing GetRouting(uint32_t ip)

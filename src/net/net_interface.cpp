@@ -6,6 +6,7 @@
 #include "packet_buffer.h"
 #include "pcap.h"
 #include "sys_plat.h"
+#include "util.h"
 #include <memory>
 
 namespace netstack 
@@ -145,14 +146,7 @@ namespace netstack
         bool ret = iface->recv_queue_.TryPop(pkt);
         if (ret == false)
             return;
-
-        bool is = false;
-        if (iface->netinfo_->name != "enp0s3")
-        {
-            is = true;
-            pkt.reset();
-            return;
-        }
-        EtherPop(pkt, is);  // 交给以太网来处理,然后逐层向上传递
+        
+        EtherPop(pkt);  // 交给以太网来处理,然后逐层向上传递
     }
 }

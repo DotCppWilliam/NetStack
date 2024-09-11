@@ -164,6 +164,8 @@ namespace netstack
 
     NetErr_t IPv4Pop(std::shared_ptr<PacketBuffer> pkt)
     {
+        return NET_ERR_OK;
+
         NetErr_t ret = CheckIpv4(pkt);
         if (ret != NET_ERR_OK)
             return ret;

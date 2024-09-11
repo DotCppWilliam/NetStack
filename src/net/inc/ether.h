@@ -141,5 +141,5 @@ namespace netstack
      * @return true 
      * @return false 
      */
-    NetErr_t EtherPop(std::shared_ptr<PacketBuffer> pkt, bool def);
+    NetErr_t EtherPop(std::shared_ptr<PacketBuffer> pkt);
 }

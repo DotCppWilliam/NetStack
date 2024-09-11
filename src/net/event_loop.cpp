@@ -84,7 +84,7 @@ namespace netstack
                 NetInterface* iface = reinterpret_cast<NetInterface*>(events[i].data.ptr);
                 if (iface->NetRx() == false)     // 从网卡读取并存入到接收队列中,
                     continue;   // 读取失败因为队列满了,但是这种情况很小
-
+                
                 pool_.SubmitTask(HandleRecvPktCallback, iface);
             }
         }
